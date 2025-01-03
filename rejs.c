@@ -15,14 +15,19 @@
 #define TRIP_DURATION 30
 #define NUMBER_OF_TRIPS_PER_DAY 5
 
-#define SHM_KEY 'A'
+#define SHM_PROJECT_ID 'A'
+#define SEM_PROJECT_ID 'B'
+
+// Semaphore indices in the semaphore array
+#define SEM_MUTEX 0      // Semaphore for the critical section
+#define SEM_BRIDGE 1     // Semaphore controlling the number of people on the bridge
 
 typedef struct {
     int peopleOnShip;
     int peopleOnBridge;
-    int currentVoyage; // current number of completed voyages
-    int signalEarlyVoyage; // signal1 
-    int signalEndOfDay; // signal2
+    int currentVoyage; // Current number of completed voyages
+    int signalEarlyVoyage; // Signal1 
+    int signalEndOfDay; // Signal2
     int queueDirection; // 0 = towards ship, 1 = towards land
 } SharedMemory;
 
@@ -68,9 +73,9 @@ void handleInput() {
 int main() {
     handleInput();
 
-    key_t memoryKey = ftok(".", SHM_KEY);
+    key_t memoryKey = ftok(".", SHM_PROJECT_ID);
     if (memoryKey == -1) {
-        perror("ftok");
+        perror("ftok for shm");
         exit(EXIT_FAILURE);
     }
 
@@ -92,4 +97,29 @@ int main() {
     sm->signalEarlyVoyage = 0;
     sm->signalEndOfDay = 0;
     sm->queueDirection = 0;
+
+
+    key_t semKey = ftok(".", SEM_PROJECT_ID);
+    if (semKey == -1) {
+        perror("ftok for sem");
+        exit(EXIT_FAILURE);
+    }
+
+    // Create an array of 2 semaphores (SEM_MUTEX, SEM_BRIDGE)
+    int semid = semget(semKey, 2, IPC_CREAT | IPC_EXCL | 0600);
+    if (semid == -1) {
+        perror("semget");
+        exit(EXIT_FAILURE);
+    }
+
+    unsigned short initValues[2];
+    initValues[SEM_MUTEX] = 1;
+    initValues[SEM_BRIDGE] = BRIDGE_CAPACITY;
+
+    if (semctl(semid, 0, SETALL, initValues) == -1) {
+        perror("semctl SETALL");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Semaphores created and initialized.\n");
 }
