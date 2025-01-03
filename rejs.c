@@ -1,59 +1,66 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
+#include <errno.h>
+#include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/sem.h>
+#include <pthread.h>
 
-#define pojemnosc_statku 100
-#define pojemnosc_mostka 10
-#define czas_miedzy_rejsami 60
-#define czas_trwania_rejsu 30
-#define ilosc_rejsow_w_danym_dniu 5
+#define SHIP_CAPACITY 100
+#define BRIDGE_CAPACITY 10
+#define TIME_BETWEEN_TRIPS 60
+#define TRIP_DURATION 30
+#define NUMBER_OF_TRIPS_PER_DAY 5
+
+typedef struct {
+    int peopleOnShip;
+    int peopleOnBridge;
+    int currentVoyage; // current number of completed voyages
+    int signalEarlyVoyage; // signal1 
+    int signalEndOfDay; // signal2
+    int queueDirection; // 0 = towards ship, 1 = towards land
+} SharedMemory;
 
 void handleInput() {
-#define pojemnosc_statku 100
-#define pojemnosc_mostka 10
-#define czas_miedzy_rejsami 60
-#define czas_trwania_rejsu 30
-#define ilosc_rejsow_w_danym_dniu 5
-
-void handleInput() {
-    if (pojemnosc_statku <= pojemnosc_mostka) {
-        fprintf(stderr, "Mostek musi miec mniejsza pojemnosc od pojemnosci statku.\n");
+    if (SHIP_CAPACITY <= BRIDGE_CAPACITY) {
+        fprintf(stderr, "The bridge capacity must be smaller than the ship capacity.\n");
         exit(1);
     }
 
-    if (pojemnosc_mostka < 1) {
-        fprintf(stderr, "Mostek musi miec pojemnosc wieksza od 0.\n");
+    if (BRIDGE_CAPACITY < 1) {
+        fprintf(stderr, "The bridge capacity must be greater than 0.\n");
         exit(2);
     }
 
-    if (pojemnosc_statku < 1) {
-        fprintf(stderr, "Statek musi miec pojemnosc wieksza od 0.\n");
+    if (SHIP_CAPACITY < 1) {
+        fprintf(stderr, "The ship capacity must be greater than 0.\n");
         exit(3);
     }
 
-    if (czas_miedzy_rejsami <= czas_trwania_rejsu) {
-        fprintf(stderr, "Czas trwania rejsu musi byc mniejszy od czasu miedzy rejsami.\n");
+    if (TIME_BETWEEN_TRIPS <= TRIP_DURATION) {
+        fprintf(stderr, "The trip duration must be shorter than the time between trips.\n");
         exit(4);
     }
 
-    if (czas_trwania_rejsu < 1) {
-        fprintf(stderr, "Rejs nie moze trwac mniej niz 1.\n");
+    if (TRIP_DURATION < 1) {
+        fprintf(stderr, "The trip cannot last less than 1.\n");
         exit(5);
     }
 
-    if (czas_miedzy_rejsami < 1) {
-        fprintf(stderr, "Czas miedzy rejsami nie moze byc mniejszy od 1.\n");
+    if (TIME_BETWEEN_TRIPS < 1) {
+        fprintf(stderr, "The time between trips cannot be less than 1.\n");
         exit(6);
     }
 
-    if (ilosc_rejsow_w_danym_dniu < 1) {
-        fprintf(stderr, "Liczba rejsow w danym dniu musi byc wieksza od 0.\n");
+    if (NUMBER_OF_TRIPS_PER_DAY < 1) {
+        fprintf(stderr, "The number of trips per day must be greater than 0.\n");
         exit(7);
     }
 
-    printf("Wszystkie parametry zostaly poprawnie zdefiniowane.\n");
-}
+    printf("All parameters have been correctly defined.\n");
 }
 
 int main() {
