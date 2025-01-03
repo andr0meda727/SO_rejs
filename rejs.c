@@ -15,6 +15,8 @@
 #define TRIP_DURATION 30
 #define NUMBER_OF_TRIPS_PER_DAY 5
 
+#define SHM_KEY 'A'
+
 typedef struct {
     int peopleOnShip;
     int peopleOnBridge;
@@ -65,4 +67,29 @@ void handleInput() {
 
 int main() {
     handleInput();
+
+    key_t memoryKey = ftok(".", SHM_KEY);
+    if (memoryKey == -1) {
+        perror("ftok");
+        exit(EXIT_FAILURE);
+    }
+
+    int shmid = shmget(memoryKey, sizeof(SharedMemory), IPC_CREAT | IPC_EXCL | 0600);
+    if (shmid == -1) {
+        perror("shmget");
+        exit(EXIT_FAILURE);
+    }
+
+    SharedMemory *sm = (SharedMemory *)shmat(shmid, NULL, 0);
+    if (sm == (void *)-1) {
+        perror("shmat");
+        exit(EXIT_FAILURE);
+    }
+
+    sm->peopleOnShip = 0;
+    sm->peopleOnBridge = 0;
+    sm->currentVoyage = 0;
+    sm->signalEarlyVoyage = 0;
+    sm->signalEndOfDay = 0;
+    sm->queueDirection = 0;
 }
