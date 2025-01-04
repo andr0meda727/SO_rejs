@@ -1,35 +1,94 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <sys/sem.h>
-#include <pthread.h>
+#include <sys/wait.h>
+#include "captains.h"
 
-#define SHIP_CAPACITY 100
-#define BRIDGE_CAPACITY 10
-#define TIME_BETWEEN_TRIPS 60
-#define TRIP_DURATION 30
-#define NUMBER_OF_TRIPS_PER_DAY 5
+int initializeSemaphores() {
+    key_t semKey = ftok(".", SEM_PROJECT_ID);
+    if (semKey == -1) {
+        perror("ftok for sem");
+        exit(EXIT_FAILURE);
+    }
 
-#define SHM_PROJECT_ID 'A'
-#define SEM_PROJECT_ID 'B'
+    int semid = semget(semKey, 2, IPC_CREAT | IPC_EXCL | 0600);
+    if (semid == -1) {
+        perror("semget");
+        exit(EXIT_FAILURE);
+    }
 
-// Semaphore indices in the semaphore array
-#define SEM_MUTEX 0      // Semaphore for the critical section
-#define SEM_BRIDGE 1     // Semaphore controlling the number of people on the bridge
+    unsigned short initValues[2];
+    initValues[SEM_MUTEX] = 1;
+    initValues[SEM_BRIDGE] = BRIDGE_CAPACITY;
 
-typedef struct {
-    int peopleOnShip;
-    int peopleOnBridge;
-    int currentVoyage; // Current number of completed voyages
-    int signalEarlyVoyage; // Signal1 
-    int signalEndOfDay; // Signal2
-    int queueDirection; // 0 = towards ship, 1 = towards land
-} SharedMemory;
+    if (semctl(semid, 0, SETALL, initValues) == -1) {
+        perror("semctl SETALL");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Semaphores created and initialized.\n");
+    return semid;
+}
+
+void cleanupSemaphores(int semid) {
+    if (semctl(semid, 0, IPC_RMID) == -1) {
+        perror("semctl IPC_RMID");
+    }
+}
+
+int initializeSharedMemory() {
+    key_t memoryKey = ftok(".", SHM_PROJECT_ID);
+    if (memoryKey == -1) {
+        perror("ftok for shm");
+        exit(EXIT_FAILURE);
+    }
+
+    int shmid = shmget(memoryKey, sizeof(SharedMemory), IPC_CREAT | IPC_EXCL | 0600);
+    if (shmid == -1) {
+        perror("shmget");
+        exit(EXIT_FAILURE);
+    }
+
+    return shmid;
+}
+
+SharedMemory* attachSharedMemory(int shmid) {
+    SharedMemory* sm = (SharedMemory *)shmat(shmid, NULL, 0);
+    if (sm == (void *)-1) {
+        perror("shmat");
+        exit(EXIT_FAILURE);
+    }
+    return sm;
+}
+
+void cleanupSharedMemory(int shmid) {
+    if (shmctl(shmid, IPC_RMID, NULL) == -1) {
+        perror("shmctl");
+    }
+}
+
+pid_t createHarbourCaptain(int shmid, int semid) {
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork for harbourCaptain");
+        exit(EXIT_FAILURE);
+    }
+    if (pid == 0) {
+        launchHabourCaptain(shmid, semid);
+        exit(EXIT_SUCCESS);
+    }
+    return pid;
+}
+
+pid_t createShipCaptain(int shmid, int semid) {
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork for shipCaptain");
+        exit(EXIT_FAILURE);
+    }
+    if (pid == 0) {
+        launchShipCaptain(shmid, semid);
+        exit(EXIT_SUCCESS);
+    }
+    return pid;
+}
 
 void handleInput() {
     if (SHIP_CAPACITY <= BRIDGE_CAPACITY) {
@@ -73,23 +132,10 @@ void handleInput() {
 int main() {
     handleInput();
 
-    key_t memoryKey = ftok(".", SHM_PROJECT_ID);
-    if (memoryKey == -1) {
-        perror("ftok for shm");
-        exit(EXIT_FAILURE);
-    }
+    int shmid = initializeSharedMemory();
+    SharedMemory *sm = attachSharedMemory(shmid);
 
-    int shmid = shmget(memoryKey, sizeof(SharedMemory), IPC_CREAT | IPC_EXCL | 0600);
-    if (shmid == -1) {
-        perror("shmget");
-        exit(EXIT_FAILURE);
-    }
-
-    SharedMemory *sm = (SharedMemory *)shmat(shmid, NULL, 0);
-    if (sm == (void *)-1) {
-        perror("shmat");
-        exit(EXIT_FAILURE);
-    }
+    int semid = initializeSemaphores();
 
     sm->peopleOnShip = 0;
     sm->peopleOnBridge = 0;
@@ -98,28 +144,14 @@ int main() {
     sm->signalEndOfDay = 0;
     sm->queueDirection = 0;
 
+    pid_t habourCaptainPid = createHarbourCaptain(shmid, semid);
+    pid_t shipCaptainPid = createShipCaptain(shmid, semid);
 
-    key_t semKey = ftok(".", SEM_PROJECT_ID);
-    if (semKey == -1) {
-        perror("ftok for sem");
-        exit(EXIT_FAILURE);
-    }
+    waitpid(habourCaptainPid, NULL, 0);
+    waitpid(shipCaptainPid, NULL, 0);
 
-    // Create an array of 2 semaphores (SEM_MUTEX, SEM_BRIDGE)
-    int semid = semget(semKey, 2, IPC_CREAT | IPC_EXCL | 0600);
-    if (semid == -1) {
-        perror("semget");
-        exit(EXIT_FAILURE);
-    }
+    cleanupSharedMemory(shmid);
+    cleanupSemaphores(semid);
 
-    unsigned short initValues[2];
-    initValues[SEM_MUTEX] = 1;
-    initValues[SEM_BRIDGE] = BRIDGE_CAPACITY;
-
-    if (semctl(semid, 0, SETALL, initValues) == -1) {
-        perror("semctl SETALL");
-        exit(EXIT_FAILURE);
-    }
-
-    printf("Semaphores created and initialized.\n");
+    return 0;
 }
