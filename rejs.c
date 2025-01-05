@@ -147,6 +147,10 @@ int main() {
     pid_t habourCaptainPid = createHarbourCaptain(shmid, semid);
     pid_t shipCaptainPid = createShipCaptain(shmid, semid);
 
+    sm->harbourCaptainPid = harbourCaptainPid;
+    sm->shipCaptainPid = shipCaptainPid;
+
+
     waitpid(habourCaptainPid, NULL, 0);
     waitpid(shipCaptainPid, NULL, 0);
 

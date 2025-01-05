@@ -32,6 +32,9 @@ typedef struct {
     int signalEarlyVoyage;  // Signal 1
     int signalEndOfDay;     // Signal 2
     int queueDirection;     // 0 = towards ship, 1 = towards land
+
+    pid_t harbourCaptainPid;
+    pid_t shipCaptainPid;
 } SharedMemory;
 
 void launchShipCaptain(int shmid, int semid);
