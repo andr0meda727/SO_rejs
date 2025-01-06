@@ -114,5 +114,25 @@ void launchShipCaptain(int shmid, int semid) {
         printf("=== Ship Captain === Sailing on cruise %d with %d passengers.\n", voyageNumber, peopleOnVoyage);
 
         sleep(TRIP_DURATION);
+
+        // End of cruise
+        waitSemaphore(semid, SEM_MUTEX);
+        sm->peopleOnShip = 0;
+        signalSemaphore(semid, SEM_MUTEX);
+
+        printf("=== Ship Captain === Cruise %d has ended, and the passengers have descended.\n", voyageNumber);
+
+        // Check whether the end-of-day signal came during the cruise
+        waitSemaphore(semid, SEM_MUTEX);
+        int endOfDay = sm->signalEndOfDay;
+        signalSemaphore(semid, SEM_MUTEX);
+        if (endOfDay) {
+            // End-of-day signal received. We are ending the day
+            printf("=== Ship Captain === I end after cruise %d, because signal was sent.\n", voyageNumber);
+            shmdt(sm);
+            return;
+        }
     }
+
+    shmdt(sm);
 }
