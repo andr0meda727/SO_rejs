@@ -77,5 +77,31 @@ void launchShipCaptain(int shmid, int semid) {
             return;
         }
         signalSemaphore(semid, SEM_MUTEX);
+
+        int bridgeCheck = 0;
+        while (1) {
+            waitSemaphore(semid, SEM_MUTEX);
+            bridgeCheck = sm->peopleOnBridge;
+            int endOfDay = sm->signalEndOfDay;
+            signalSemaphore(semid, SEM_MUTEX);
+
+            if (endOfDay) {
+                // Checking to see if someone has sent an end-of-day signal while waiting for an empty bridge
+                printf("=== Ship Captain === End-of-day signal was received just before departure.\n");
+                // End of day, people have to leave ship
+                waitSemaphore(semid, SEM_MUTEX);
+                sm->peopleOnShip = 0;
+                signalSemaphore(semid, SEM_MUTEX);
+
+                shmdt(sm);
+                return;
+            }
+
+            if (bridgeCheck == 0) {
+                break;
+            }
+            // checking every 0.5s
+            usleep(500000);
+        }
     }
 }
