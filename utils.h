@@ -11,6 +11,8 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <string.h>
+#include <signal.h>
+
 
 #define SHIP_CAPACITY 100
 #define BRIDGE_CAPACITY 10
