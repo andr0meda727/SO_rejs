@@ -1,4 +1,5 @@
 #include "captains.h"
+#include <signal.h>
 
 void handle_signal(int sig) {
     if (sig == SIGUSR1) {
@@ -11,4 +12,19 @@ void handle_signal(int sig) {
     }
 }
 
-void launchShipCaptain(int shmid, int semid) {}
+void launchShipCaptain(int shmid, int semid) {
+    struct sigaction sa;
+    sa.sa_handler = handle_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+
+    if (sigaction(SIGUSR1, &sa, NULL) == -1) {
+        perror("sigaction SIGUSR1");
+        exit(EXIT_FAILURE);
+    }
+
+    if (sigaction(SIGUSR2, &sa, NULL) == -1) {
+        perror("sigaction SIGUSR2");
+        exit(EXIT_FAILURE);
+    }
+}
