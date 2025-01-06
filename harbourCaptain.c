@@ -37,5 +37,3 @@ void launchHabourCaptain(int shmid, int semid) {
 
     shmdt(sm);
 }
-
-

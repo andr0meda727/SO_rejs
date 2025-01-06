@@ -68,5 +68,14 @@ void launchShipCaptain(int shmid, int semid) {
             sleep(1);
             slept++;
         }
+
+        waitSemaphore(semid, SEM_MUTEX);
+        if (sm->currentVoyage >= NUMBER_OF_TRIPS_PER_DAY) {
+            signalSemaphore(semid, SEM_MUTEX);
+            printf("=== Ship Captain === The cruise limit %d has been reached. End of work for today.”\n", NUMBER_OF_TRIPS_PER_DAY);
+            shmdt(sm);
+            return;
+        }
+        signalSemaphore(semid, SEM_MUTEX);
     }
 }
