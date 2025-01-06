@@ -118,3 +118,38 @@ void handleInput() {
 
     printf("All parameters have been correctly defined.\n");
 }
+
+SharedMemory* attachSharedMemory(int shmid) {
+    SharedMemory* sm = (SharedMemory *)shmat(shmid, NULL, 0);
+    if (sm == (void *)-1) {
+        perror("shmat");
+        exit(EXIT_FAILURE);
+    }
+    return sm;
+}
+
+pid_t createHarbourCaptain(int shmid, int semid) {
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork for harbourCaptain");
+        exit(EXIT_FAILURE);
+    }
+    if (pid == 0) {
+        launchHabourCaptain(shmid, semid);
+        exit(EXIT_SUCCESS);
+    }
+    return pid;
+}
+
+pid_t createShipCaptain(int shmid, int semid) {
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork for shipCaptain");
+        exit(EXIT_FAILURE);
+    }
+    if (pid == 0) {
+        launchShipCaptain(shmid, semid);
+        exit(EXIT_SUCCESS);
+    }
+    return pid;
+}

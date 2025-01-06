@@ -5,6 +5,7 @@
 #include <sys/shm.h>
 #include <sys/sem.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -43,8 +44,11 @@ int initializeSharedMemory();
 int initializeSemaphores();
 void cleanupSemaphores(int semid);
 void cleanupSharedMemory(int shmid);
-int waitSemafor(int semID, int number, int flags);
-void signalSemafor(int semID, int number);
+int waitSemaphore(int semID, int number);
+void signalSemaphore(int semID, int number);
+SharedMemory* attachSharedMemory(int shmid);
+pid_t createHarbourCaptain(int shmid, int semid);
+pid_t createShipCaptain(int shmid, int semid);
 
 #endif 
 
