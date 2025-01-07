@@ -12,6 +12,8 @@
 #include <errno.h>
 #include <string.h>
 #include <signal.h>
+#include <pthread.h>
+#include <time.h>
 
 
 #define SHIP_CAPACITY 100
@@ -49,7 +51,5 @@ void cleanupSharedMemory(int shmid);
 int waitSemaphore(int semID, int number);
 void signalSemaphore(int semID, int number);
 SharedMemory* attachSharedMemory(int shmid);
-pid_t createHarbourCaptain(int shmid, int semid);
-pid_t createShipCaptain(int shmid, int semid);
 
 #endif 

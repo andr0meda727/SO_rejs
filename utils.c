@@ -127,29 +127,3 @@ SharedMemory* attachSharedMemory(int shmid) {
     }
     return sm;
 }
-
-pid_t createHarbourCaptain(int shmid, int semid) {
-    pid_t pid = fork();
-    if (pid == -1) {
-        perror("fork for harbourCaptain");
-        exit(EXIT_FAILURE);
-    }
-    if (pid == 0) {
-        launchHabourCaptain(shmid, semid);
-        exit(EXIT_SUCCESS);
-    }
-    return pid;
-}
-
-pid_t createShipCaptain(int shmid, int semid) {
-    pid_t pid = fork();
-    if (pid == -1) {
-        perror("fork for shipCaptain");
-        exit(EXIT_FAILURE);
-    }
-    if (pid == 0) {
-        launchShipCaptain(shmid, semid);
-        exit(EXIT_SUCCESS);
-    }
-    return pid;
-}
