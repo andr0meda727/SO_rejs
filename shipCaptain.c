@@ -115,12 +115,12 @@ void launchShipCaptain(int shmid, int semid) {
 
         sleep(TRIP_DURATION);
 
-        // End of cruise
+        // End of cruise and changing bridge direction
         waitSemaphore(semid, SEM_MUTEX);
-        sm->peopleOnShip = 0;
+        sm->queueDirection = 1; // 1 = towards land
         signalSemaphore(semid, SEM_MUTEX);
 
-        printf("=== Ship Captain === Cruise %d has ended, and the passengers have descended.\n", voyageNumber);
+        printf("=== Ship Captain === Cruise %d has ended. Bridge direction set to disembarking.\n", voyageNumber);
 
         // Check whether the end-of-day signal came during the cruise
         waitSemaphore(semid, SEM_MUTEX);
