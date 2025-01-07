@@ -1,7 +1,8 @@
 #include "utils.h"
 
 void launchHabourCaptain(int shmid, int semid) {
-    SharedMemory *sm = (SharedMemory *)shmat(shmid, NULL, 0);
+    SharedMemory *sm = attachSharedMemory(shmid);
+    
     if (sm == (void *)-1) {
         perror("shmat habour captain");
         exit(EXIT_FAILURE);
