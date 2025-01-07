@@ -1,7 +1,10 @@
 #include "utils.h"
 
+int shmidToSignal;
+
 void handle_signal(int sig) {
-    SharedMemory *sm = (SharedMemory *)shmat(shmid, NULL, 0);
+    SharedMemory *sm = attachSharedMemory(shmidToSignal);
+    
     if (sm == (void *)-1) {
         perror("shmat in signal handler");
         exit(EXIT_FAILURE);
@@ -19,7 +22,9 @@ void handle_signal(int sig) {
 }
 
 void launchShipCaptain(int shmid, int semid) {
-    SharedMemory *sm = (SharedMemory *)shmat(shmid, NULL, 0);
+    SharedMemory *sm = attachSharedMemory(shmid);
+    shmidToSignal = shmid;
+
     if (sm == (void *)-1) {
         perror("shmat ship captain");
         exit(EXIT_FAILURE);
@@ -122,6 +127,16 @@ void launchShipCaptain(int shmid, int semid) {
 
         printf("=== Ship Captain === Cruise %d has ended. Bridge direction set to disembarking.\n", voyageNumber);
 
+        while (1) {
+            waitSemaphore(semid, SEM_MUTEX);
+            if (sm->peopleOnShip == 0 && sm->peopleOnBridge == 0) {
+                signalSemaphore(semid, SEM_MUTEX);
+                break;
+            }
+            signalSemaphore(semid, SEM_MUTEX);
+            usleep(100000); // 0.1s
+        }
+
         // Check whether the end-of-day signal came during the cruise
         waitSemaphore(semid, SEM_MUTEX);
         int endOfDay = sm->signalEndOfDay;
@@ -132,6 +147,12 @@ void launchShipCaptain(int shmid, int semid) {
             shmdt(sm);
             return;
         }
+
+        waitSemaphore(semid, SEM_MUTEX);
+        sm->queueDirection = 0; // If brigde is empty, queueDirection again set to 0 (queue towards ship)
+        signalSemaphore(semid, SEM_MUTEX);
+
+        printf("=== Ship Captain === Bridge direction set to boarding for the next voyage.\n");
     }
 
     shmdt(sm);
