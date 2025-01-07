@@ -2,6 +2,21 @@
 
 int shmidToSignal;
 
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <shmid> <semid>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    int shmid = atoi(argv[1]);
+    int semid = atoi(argv[2]);
+
+    launchShipCaptain(shmid, semid);
+    
+    return 0;
+}
+
+
 void handle_signal(int sig) {
     SharedMemory *sm = attachSharedMemory(shmidToSignal);
     
@@ -16,6 +31,7 @@ void handle_signal(int sig) {
     } else if (sig == SIGUSR2) {
         printf("=== Ship Captain === The end-of-day signal has been received\n");
         sm->signalEndOfDay = 1;
+        exit(1);
     }
 
     shmdt(sm); // Detach after updating
@@ -59,6 +75,7 @@ void launchShipCaptain(int shmid, int semid) {
             if (endOfDay) {
                 printf("=== Ship Captain === Ending day due to signal\n");
                 waitSemaphore(semid, SEM_MUTEX);
+                // simulate people getting and change the queue direction 
                 sm->peopleOnShip = 0;
                 signalSemaphore(semid, SEM_MUTEX);
                 shmdt(sm);

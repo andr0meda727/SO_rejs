@@ -1,6 +1,6 @@
 #include "utils.h"
 
-int waitSemaphore(int semID, int number) {
+void waitSemaphore(int semID, int number) {
    struct sembuf operation;
    operation.sem_num = number;
    operation.sem_op = -1;
@@ -10,7 +10,6 @@ int waitSemaphore(int semID, int number) {
       perror("Error in waitSemaphore");
       exit(EXIT_FAILURE);
    }
-
 }
 
 void signalSemaphore(int semID, int number) {

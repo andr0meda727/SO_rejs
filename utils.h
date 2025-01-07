@@ -43,12 +43,12 @@ typedef struct {
 
 void handleInput();
 void launchShipCaptain(int shmid, int semid);
-void launchHabourCaptain(int shmid, int semid);
+void launchHarbourCaptain(int shmid, int semid);
 int initializeSharedMemory();
 int initializeSemaphores();
 void cleanupSemaphores(int semid);
 void cleanupSharedMemory(int shmid);
-int waitSemaphore(int semID, int number);
+void waitSemaphore(int semID, int number);
 void signalSemaphore(int semID, int number);
 SharedMemory* attachSharedMemory(int shmid);
 

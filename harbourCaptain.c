@@ -1,6 +1,21 @@
 #include "utils.h"
 
-void launchHabourCaptain(int shmid, int semid) {
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <shmid> <semid>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    int shmid = atoi(argv[1]);
+    int semid = atoi(argv[2]);
+
+    launchHarbourCaptain(shmid, semid);
+    
+    return 0;
+}
+
+
+void launchHarbourCaptain(int shmid, int semid) {
     SharedMemory *sm = attachSharedMemory(shmid);
     
     if (sm == (void *)-1) {
@@ -9,10 +24,10 @@ void launchHabourCaptain(int shmid, int semid) {
     }
 
     printf("=== Habour Captain === Starting\n");
+    printf("=== Habour Captain === Enter: w = early cruise, k = end of day, q = exit\n");
 
     char c;
     while (1) {
-        printf("=== Habour Captain === Enter: w = early cruise, k = end of day, q = exit\n");
         c = getchar();
         if (c == '\n') continue;
 
@@ -23,6 +38,7 @@ void launchHabourCaptain(int shmid, int semid) {
         } else if (c == 'k') {
             kill(sm->shipCaptainPid, SIGUSR2); // Send SIGUSR2 for end-of-day
             printf("=== Habour Captain === End-of-day signal sent\n");
+            break;
         } else if (c == 'q') {
             signalSemaphore(semid, SEM_MUTEX);
             printf("=== Habour Captain === Exiting\n");
