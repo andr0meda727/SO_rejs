@@ -2,11 +2,11 @@
 
 int waitSemaphore(int semID, int number) {
    struct sembuf operation;
-   operacje[0].sem_num = number;
-   operacje[0].sem_op = -1;
-   operacje[0].sem_flg = 0;
+   operation.sem_num = number;
+   operation.sem_op = -1;
+   operation.sem_flg = 0;
 
-   if (semop(semID, operation, 1) == -1) {
+   if (semop(semID, &operation, 1) == -1) {
       perror("Error in waitSemaphore");
       exit(EXIT_FAILURE);
    }
@@ -15,11 +15,11 @@ int waitSemaphore(int semID, int number) {
 
 void signalSemaphore(int semID, int number) {
    struct sembuf operation;
-   operacje[0].sem_num = number;
-   operacje[0].sem_op = 1;
-   operacje[0].sem_flg = 0;
+   operation.sem_num = number;
+   operation.sem_op = 1;
+   operation.sem_flg = 0;
 
-   if (semop(semID, operation, 1) == -1) {
+   if (semop(semID, &operation, 1) == -1) {
         perror("Error in signalSemaphore");
         exit(EXIT_FAILURE);
    }
