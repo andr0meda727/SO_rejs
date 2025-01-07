@@ -6,7 +6,7 @@
 typedef struct {
     int shmid;
     int semid;
-    int idPasazera;
+    int passengerID;
 } PassengerData;
 
 

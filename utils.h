@@ -53,4 +53,3 @@ pid_t createHarbourCaptain(int shmid, int semid);
 pid_t createShipCaptain(int shmid, int semid);
 
 #endif 
-
