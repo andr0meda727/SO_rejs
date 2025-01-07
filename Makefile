@@ -1,34 +1,16 @@
-# Compiler and flags
 CC = gcc
 CFLAGS = -Wall -Wextra -pthread
 
-# Executable name
-EXEC = rejs
+all: rejs harbourCaptain shipCaptain
 
-# Source files
-SRCS = rejs.c utils.c passenger.c shipCaptain.c harbourCaptain.c
+rejs: rejs.c utils.c passenger.c
+	$(CC) $(CFLAGS) -o rejs rejs.c utils.c passenger.c
 
-# Header files
-HEADERS = utils.h passenger.h
+harbourCaptain: harbourCaptain.c utils.c
+	$(CC) $(CFLAGS) -o harbourCaptain harbourCaptain.c utils.c
 
-# Object files
-OBJS = $(SRCS:.c=.o)
+shipCaptain: shipCaptain.c utils.c
+	$(CC) $(CFLAGS) -o shipCaptain shipCaptain.c utils.c
 
-# Default target
-all: $(EXEC)
-
-# Link the executable
-$(EXEC): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS)
-
-# Compile source files to object files
-%.o: %.c $(HEADERS)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-# Clean up build files
 clean:
-	rm -f $(EXEC) $(OBJS)
-
-# Run the program
-run: $(EXEC)
-	./$(EXEC)
+	rm -f rejs harbourCaptain shipCaptain
