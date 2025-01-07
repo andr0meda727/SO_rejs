@@ -45,16 +45,28 @@ void *Passenger(void *arg) {
                 waitSemaphore(pd->semid, SEM_MUTEX);
 
                 if (sm->peopleOnShip > 0) {
-                    sm->peopleOnShip--;
-                    printf("=== Passenger %d === Disembarking. Remaining on ship: %d\n",
-                        pd->passengerID, sm->peopleOnShip);
+                    sm->peopleOnShip--; // Passenger left the ship and is currently on bridge
+                    sm->peopleOnBridge++;
+                    printf("=== Passenger %d === Left ship. Remaining on ship: %d, on bridge: %d\n",
+                        pd->passengerID, sm->peopleOnShip, sm->peopleOnBridge);
 
                     signalSemaphore(pd->semid, SEM_MUTEX);
-                    
-                    sleep(1); // 1s for passenger
-                    break; // Passenger descends
+
+                    sleep(1); // Symulation of going through bridge
+
+                    // Passenger left the bridge
+                    waitSemaphore(pd->semid, SEM_MUTEX);
+                    sm->peopleOnBridge--;
+                    printf("=== Passenger %d === Left the bridge. Remaining on bridge: %d\n",
+                        pd->passengerID, sm->peopleOnBridge);
+                    signalSemaphore(pd->semid, SEM_MUTEX);
+
+                    // Freeup the space on bridge (probably have to adjust it later)
+                    signalSemaphore(pd->semid, SEM_BRIDGE);
+
+                    break;
                 }
-                
+
                 signalSemaphore(pd->semid, SEM_MUTEX);
             }
             usleep(200000); // 0.2s
@@ -67,6 +79,6 @@ void *Passenger(void *arg) {
     }
 
     
-    // shmdt(sm);
-    // pthread_exit(NULL);
+    shmdt(sm);
+    pthread_exit(NULL);
 }
