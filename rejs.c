@@ -31,7 +31,7 @@ int main() {
         perror(RED "Error forking for harbourCaptain" RESET);
         exit(EXIT_FAILURE);
     } else if (harbourCaptainPid == 0) {
-        if (execl("./harbourCaptain", "harbourCaptain", shmidStr, semidStr, NULL) == -1) {
+        if (execl("./harbourCaptain", "harbourCaptain", shmidStr, NULL) == -1) {
             perror(RED "execl harbourCaptain" RESET);
             exit(EXIT_FAILURE);
         }

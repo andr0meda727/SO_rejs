@@ -1,7 +1,5 @@
 #include "passenger.h"
-
-#define CYAN "\033[36m"
-#define RESET "\033[0m"
+#include "utils.h"
 
 
 void *Passenger(void *arg) {

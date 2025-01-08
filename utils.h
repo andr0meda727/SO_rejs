@@ -17,6 +17,8 @@
 
 #define RED "\033[31m"
 #define GREEN "\033[32m"
+#define MAGENTA "\033[35m"
+#define CYAN "\033[36m"
 #define RESET "\033[0m"
 
 #define SHIP_CAPACITY 100
@@ -46,7 +48,7 @@ typedef struct {
 
 void handleInput();
 void launchShipCaptain(int shmid, int semid);
-void launchHarbourCaptain(int shmid, int semid);
+void launchHarbourCaptain(int shmid);
 int initializeSharedMemory();
 int initializeSemaphores();
 void cleanupSemaphores(int semid);
