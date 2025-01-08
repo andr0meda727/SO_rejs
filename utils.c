@@ -1,9 +1,5 @@
 #include "utils.h"
 
-#define RED "\033[31m"
-#define GREEN "\033[32m"
-#define RESET "\033[0m"
-
 void waitSemaphore(int semID, int number) {
    struct sembuf operation;
    operation.sem_num = number;

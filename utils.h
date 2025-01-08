@@ -15,6 +15,9 @@
 #include <pthread.h>
 #include <time.h>
 
+#define RED "\033[31m"
+#define GREEN "\033[32m"
+#define RESET "\033[0m"
 
 #define SHIP_CAPACITY 100
 #define BRIDGE_CAPACITY 10

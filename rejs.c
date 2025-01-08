@@ -1,7 +1,7 @@
 #include "utils.h"
 #include "passenger.h"
 
-#define NUM_PASSENGERS 10
+#define NUM_PASSENGERS 20
 
 int main() {
     handleInput();
@@ -10,35 +10,51 @@ int main() {
     SharedMemory *sm = attachSharedMemory(shmid);
     int semid = initializeSemaphores();
 
+    char shmidStr[10], semidStr[10];
+    sprintf(shmidStr, "%d", shmid);
+    sprintf(semidStr, "%d", semid);
+
     // Shared memory initialization
+    waitSemaphore(semid, SEM_MUTEX);
     sm->peopleOnShip = 0;
     sm->peopleOnBridge = 0;
     sm->currentVoyage = 0;
     sm->signalEarlyVoyage = 0;
     sm->signalEndOfDay = 0;
     sm->queueDirection = 0;
+    sm->harbourCaptainPid = 0;
+    sm->shipCaptainPid = 0;
+    signalSemaphore(semid, SEM_MUTEX);
 
     pid_t harbourCaptainPid = fork();
     if (harbourCaptainPid == -1) {
-        perror("Error forking for harbourCaptain");
+        perror(RED "Error forking for harbourCaptain" RESET);
         exit(EXIT_FAILURE);
     } else if (harbourCaptainPid == 0) {
-        if (execl("./harbourCaptain", "harbourCaptain", to_string(shmid), to_string(semid), NULL) == -1) {
-            perror("execl harbourCaptain");
+        if (execl("./harbourCaptain", "harbourCaptain", shmidStr, semidStr, NULL) == -1) {
+            perror(RED "execl harbourCaptain" RESET);
             exit(EXIT_FAILURE);
         }
     }
 
+    waitSemaphore(semid, SEM_MUTEX);
+    sm->harbourCaptainPid = harbourCaptainPid;
+    signalSemaphore(semid, SEM_MUTEX);
+
     pid_t shipCaptainPid = fork();
-    if (shipCaptainPid < 0) {
-        perror("Error forking for shipCaptain");
+    if (shipCaptainPid == -1) {
+        perror(RED "Error forking for shipCaptain" RESET);
         exit(EXIT_FAILURE);
     } else if (shipCaptainPid == 0) {
-        if (execl("./shipCaptain", "shipCaptain", to_string(shmid), to_string(semid), NULL) == -1) {
-            perror("execl shipCaptain");
+        if (execl("./shipCaptain", "shipCaptain", shmidStr, semidStr, NULL) == -1) {
+            perror(RED "execl shipCaptain" RESET);
             exit(EXIT_FAILURE);
         }
     }
+
+    waitSemaphore(semid, SEM_MUTEX);
+    sm->shipCaptainPid = shipCaptainPid;
+    signalSemaphore(semid, SEM_MUTEX);
 
     sm->harbourCaptainPid = harbourCaptainPid;
     sm->shipCaptainPid = shipCaptainPid;
@@ -55,7 +71,7 @@ int main() {
         passengerData[i].passengerID = i + 1;
 
         if (pthread_create(&passengers[i], NULL, Passenger, &passengerData[i]) != 0) {
-            perror("Error creating passenger thread");
+            perror(RED "Error creating passenger thread" RESET);
             exit(EXIT_FAILURE);
         }
 
@@ -70,14 +86,16 @@ int main() {
     }
 
     // Waiting for the captains to finish
-    waitpid(harbourCaptainPid, NULL, 0);
     waitpid(shipCaptainPid, NULL, 0);
+    printf(GREEN "=== Main === Ship Captain has finished." RESET "\n");
+    waitpid(harbourCaptainPid, NULL, 0);
+    printf(GREEN "=== Main === Harbour Captain has finished." RESET "\n");
 
     // Cleanup
     shmdt(sm);
     cleanupSharedMemory(shmid);
     cleanupSemaphores(semid);
 
-    printf("Main process finished. Cleaned up shared memory and semaphores.\n");
+    printf(GREEN "Main process finished. Cleaned up shared memory and semaphores." RESET "\n");
     return 0;
 }
