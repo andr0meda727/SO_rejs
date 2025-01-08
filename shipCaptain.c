@@ -4,7 +4,7 @@ int shmidToSignal;
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        fprintf(stderr, "Usage: %s <shmid> <semid>\n", argv[0]);
+        fprintf(stderr, RED "Usage: %s <shmid> <semid>" RESET "\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
     int semid = atoi(argv[2]);
 
     launchShipCaptain(shmid, semid);
-    
+
     return 0;
 }
 
@@ -21,17 +21,21 @@ void handle_signal(int sig) {
     SharedMemory *sm = attachSharedMemory(shmidToSignal);
     
     if (sm == (void *)-1) {
-        perror("shmat in signal handler");
+        perror(RED "shmat in signal handler" RESET);
         exit(EXIT_FAILURE);
     }
 
     if (sig == SIGUSR1) {
-        printf("=== Ship Captain === Early departure signal has been received\n");
+        printf(YELLOW "=== Ship Captain ===" RESET " Early departure signal has been received\n");
+        waitSemaphore(shmidToSignal, SEM_MUTEX);
         sm->signalEarlyVoyage = 1;
+        sm->queueDirection = 1; // queue towards land, so passenger can't enter
+        signalSemaphore(shmidToSignal, SEM_MUTEX);
     } else if (sig == SIGUSR2) {
-        printf("=== Ship Captain === The end-of-day signal has been received\n");
+        waitSemaphore(shmidToSignal, SEM_MUTEX);
         sm->signalEndOfDay = 1;
-        exit(1);
+        sm->queueDirection = 1; // queue towards land, so passenger can't enter
+        signalSemaphore(shmidToSignal, SEM_MUTEX);
     }
 
     shmdt(sm); // Detach after updating
@@ -42,7 +46,7 @@ void launchShipCaptain(int shmid, int semid) {
     shmidToSignal = shmid;
 
     if (sm == (void *)-1) {
-        perror("shmat ship captain");
+        perror(RED "shmat ship captain" RESET);
         exit(EXIT_FAILURE);
     }
 
@@ -53,18 +57,28 @@ void launchShipCaptain(int shmid, int semid) {
 
 
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        perror("sigaction SIGUSR1");
+        perror(RED "sigaction SIGUSR1" RESET);
         exit(EXIT_FAILURE);
     }
 
     if (sigaction(SIGUSR2, &sa, NULL) == -1) {
-        perror("sigaction SIGUSR2");
+        perror(RED "sigaction SIGUSR2" RESET);
         exit(EXIT_FAILURE);
     }
 
-    printf("=== Ship Captain === Starting\n");
+    printf(YELLOW "=== Ship Captain ===" RESET " Starting\n");
 
     while (1) {
+        waitSemaphore(semid, SEM_MUTEX);
+        if (sm->currentVoyage >= NUMBER_OF_TRIPS_PER_DAY) {
+            signalSemaphore(semid, SEM_MUTEX);
+            printf(YELLOW "=== Ship Captain ===" RESET " Reached daily trip limit %d. Ending work.\n", NUMBER_OF_TRIPS_PER_DAY);
+            shmdt(sm);
+            return;
+        }
+        signalSemaphore(semid, SEM_MUTEX);
+
+        // Waiting between cruises with the possibility of an early departure
         int slept = 0;
         while (slept < TIME_BETWEEN_TRIPS) {
             waitSemaphore(semid, SEM_MUTEX); // Lock
@@ -73,104 +87,115 @@ void launchShipCaptain(int shmid, int semid) {
             signalSemaphore(semid, SEM_MUTEX); // Unlock
 
             if (endOfDay) {
-                printf("=== Ship Captain === Ending day due to signal\n");
+                printf(YELLOW "=== Ship Captain ===" RESET " End-of-day signal received. Preparing for disembarking.\n");
+
+                //  Setting the direction of the bridge and waiting for passengers to leave
                 waitSemaphore(semid, SEM_MUTEX);
-                // simulate people getting and change the queue direction 
-                sm->peopleOnShip = 0;
+                sm->queueDirection = 1;
                 signalSemaphore(semid, SEM_MUTEX);
+
+                // Waiting until there are no passengers on the ship and bridge
+                while (1) {
+                    waitSemaphore(semid, SEM_MUTEX);
+                    int peopleOnShip = sm->peopleOnShip;
+                    int peopleOnBridge = sm->peopleOnBridge;
+                    signalSemaphore(semid, SEM_MUTEX);
+
+                    if (peopleOnShip == 0 && peopleOnBridge == 0) {
+                        printf(YELLOW "=== Ship Captain ===" RESET " All passengers have disembarked.\n");
+                        break;
+                    }
+
+                    usleep(100000); // 0.1s
+                }
+
+                printf(YELLOW "=== Ship Captain ===" RESET " Ending day as per signal.\n");
                 shmdt(sm);
                 return;
             }
 
             if (earlyVoyage) {
-                printf("=== Ship Captain === Early departure triggered\n");
-                waitSemaphore(semid, SEM_MUTEX);
-                sm->signalEarlyVoyage = 0;
-                signalSemaphore(semid, SEM_MUTEX);
-                break;
+                printf(YELLOW "=== Ship Captain ===" RESET " Early departure signal received.\n");
+
+                // Waiting until the bridge is empty
+                while (1) {
+                    waitSemaphore(semid, SEM_MUTEX);
+                    int peopleOnBridge = sm->peopleOnBridge;
+                    signalSemaphore(semid, SEM_MUTEX);
+
+                    if (peopleOnBridge == 0) {
+                        printf(YELLOW "=== Ship Captain ===" RESET " Bridge is empty. Departing early.\n");
+                        break;
+                    }
+
+                    usleep(100000); // 0.1s
+                }
+
+                break; // Going to departure
             }
 
             sleep(1);
             slept++;
         }
 
-        waitSemaphore(semid, SEM_MUTEX);
-        if (sm->currentVoyage >= NUMBER_OF_TRIPS_PER_DAY) {
-            signalSemaphore(semid, SEM_MUTEX);
-            printf("=== Ship Captain === The cruise limit %d has been reached. End of work for today.”\n", NUMBER_OF_TRIPS_PER_DAY);
-            shmdt(sm);
-            return;
-        }
-        signalSemaphore(semid, SEM_MUTEX);
-
-        int bridgeCheck = 0;
         while (1) {
             waitSemaphore(semid, SEM_MUTEX);
-            bridgeCheck = sm->peopleOnBridge;
-            int endOfDay = sm->signalEndOfDay;
+            int peopleOnBridge = sm->peopleOnBridge;
             signalSemaphore(semid, SEM_MUTEX);
 
-            if (endOfDay) {
-                // Checking to see if someone has sent an end-of-day signal while waiting for an empty bridge
-                printf("=== Ship Captain === End-of-day signal was received just before departure.\n");
-                // End of day, people have to leave ship
-                waitSemaphore(semid, SEM_MUTEX);
-                sm->peopleOnShip = 0;
-                signalSemaphore(semid, SEM_MUTEX);
-
-                shmdt(sm);
-                return;
-            }
-
-            if (bridgeCheck == 0) {
+            if (peopleOnBridge == 0) {
                 break;
             }
-            // checking every 0.5s
-            usleep(500000);
-        }
 
-        waitSemaphore(semid, SEM_MUTEX);
-        int voyageNumber = ++sm->currentVoyage;
-        int peopleOnVoyage = sm->peopleOnShip; // have to be <= ship capacity
-        signalSemaphore(semid, SEM_MUTEX);
-        printf("=== Ship Captain === Sailing on cruise %d with %d passengers.\n", voyageNumber, peopleOnVoyage);
-
-        sleep(TRIP_DURATION);
-
-        // End of cruise and changing bridge direction
-        waitSemaphore(semid, SEM_MUTEX);
-        sm->queueDirection = 1; // 1 = towards land
-        signalSemaphore(semid, SEM_MUTEX);
-
-        printf("=== Ship Captain === Cruise %d has ended. Bridge direction set to disembarking.\n", voyageNumber);
-
-        while (1) {
-            waitSemaphore(semid, SEM_MUTEX);
-            if (sm->peopleOnShip == 0 && sm->peopleOnBridge == 0) {
-                signalSemaphore(semid, SEM_MUTEX);
-                break;
-            }
-            signalSemaphore(semid, SEM_MUTEX);
             usleep(100000); // 0.1s
         }
 
-        // Check whether the end-of-day signal came during the cruise
+
+        // Cruise starting
         waitSemaphore(semid, SEM_MUTEX);
-        int endOfDay = sm->signalEndOfDay;
+        sm->currentVoyage++;
+        int voyageNumber = sm->currentVoyage;
+        int peopleOnVoyage = sm->peopleOnShip;
         signalSemaphore(semid, SEM_MUTEX);
-        if (endOfDay) {
-            // End-of-day signal received. We are ending the day
-            printf("=== Ship Captain === I end after cruise %d, because signal was sent.\n", voyageNumber);
-            shmdt(sm);
-            return;
+
+        printf(YELLOW "=== Ship Captain ===" RESET " Sailing on cruise %d with %d passengers.\n", voyageNumber, peopleOnVoyage);
+
+        // Simulation of cruise
+        sleep(TRIP_DURATION);
+
+        // Cruise end
+        printf(YELLOW "=== Ship Captain ===" RESET " Cruise %d has ended. Arriving at port.\n", voyageNumber);
+
+
+
+        printf(YELLOW "=== Ship Captain ===" RESET " Sailing on cruise %d with %d passengers.\n", voyageNumber, peopleOnVoyage);
+        sleep(TRIP_DURATION);
+
+        // Disembarkation
+        waitSemaphore(semid, SEM_MUTEX);
+        sm->queueDirection = 1; // towards land
+        signalSemaphore(semid, SEM_MUTEX);
+
+        // Waiting for all passengers to get off
+        while (1) {
+            waitSemaphore(semid, SEM_MUTEX);
+            int peopleOnShip = sm->peopleOnShip;
+            int peopleOnBridge = sm->peopleOnBridge;
+            signalSemaphore(semid, SEM_MUTEX);
+
+            if (peopleOnShip == 0 && peopleOnBridge == 0) {
+                printf(YELLOW "=== Ship Captain ===" RESET " All passengers have disembarked after cruise %d.\n", voyageNumber);
+                break;
+            }
+
+            usleep(100000); // 0.1s
         }
 
+        // Change bridge direction again
         waitSemaphore(semid, SEM_MUTEX);
-        sm->queueDirection = 0; // If brigde is empty, queueDirection again set to 0 (queue towards ship)
+        sm->queueDirection = 0; // towards ship, getting ready for next voyage
         signalSemaphore(semid, SEM_MUTEX);
 
-        printf("=== Ship Captain === Bridge direction set to boarding for the next voyage.\n");
+        printf(YELLOW "=== Ship Captain ===" RESET " Bridge direction set back to boarding for the next voyage.\n");
     }
-
-    shmdt(sm);
 }
