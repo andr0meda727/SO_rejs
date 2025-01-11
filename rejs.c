@@ -6,13 +6,21 @@
 int main() {
     handleInput();
 
+    // pipefd[0] - read
+    // pipefd[1] - write
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        perror(RED "pipe" RESET);
+        exit(EXIT_FAILURE);
+    }
+
     int shmid = initializeSharedMemory();
     SharedMemory *sm = attachSharedMemory(shmid);
     int semid = initializeSemaphores();
 
-    char shmidStr[10], semidStr[10];
-    sprintf(shmidStr, "%d", shmid);
-    sprintf(semidStr, "%d", semid);
+    char shmStr[16], semStr[16];
+    sprintf(shmStr, "%d", shmid);
+    sprintf(semStr, "%d", semid);
 
     // Shared memory initialization
     waitSemaphore(semid, SEM_MUTEX);
@@ -22,67 +30,51 @@ int main() {
     sm->signalEarlyVoyage = 0;
     sm->signalEndOfDay = 0;
     sm->queueDirection = 0;
-    sm->harbourCaptainPid = 0;
-    sm->shipCaptainPid = 0;
     signalSemaphore(semid, SEM_MUTEX);
 
-    pid_t harbourCaptainPid = fork();
-    if (harbourCaptainPid == -1) {
-        perror(RED "Error forking for harbourCaptain" RESET);
-        exit(EXIT_FAILURE);
-    } else if (harbourCaptainPid == 0) {
-        if (execl("./harbourCaptain", "harbourCaptain", shmidStr, NULL) == -1) {
-            perror(RED "execl harbourCaptain" RESET);
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    waitSemaphore(semid, SEM_MUTEX);
-    sm->harbourCaptainPid = harbourCaptainPid;
-    signalSemaphore(semid, SEM_MUTEX);
 
     pid_t shipCaptainPid = fork();
     if (shipCaptainPid == -1) {
         perror(RED "Error forking for shipCaptain" RESET);
         exit(EXIT_FAILURE);
     } else if (shipCaptainPid == 0) {
-        if (execl("./shipCaptain", "shipCaptain", shmidStr, semidStr, NULL) == -1) {
+        close(pipefd[0]); // Close reading
+        char writeFdStr[10];
+        sprintf(writeFdStr, "%d", pipefd[1]); // We pass the writing descriptor
+        if (execl("./shipCaptain", "shipCaptain", shmStr, semStr, writeFdStr; NULL) == -1) {
             perror(RED "execl shipCaptain" RESET);
             exit(EXIT_FAILURE);
         }
     }
 
-    waitSemaphore(semid, SEM_MUTEX);
-    sm->shipCaptainPid = shipCaptainPid;
-    signalSemaphore(semid, SEM_MUTEX);
-
-    sm->harbourCaptainPid = harbourCaptainPid;
-    sm->shipCaptainPid = shipCaptainPid;
-
-    // Creating threads of passengers
-    pthread_t passengers[NUM_PASSENGERS];
-    PassengerData passengerData[NUM_PASSENGERS];
-
-    srand(time(NULL));
-
-    for (int i = 0; i < NUM_PASSENGERS; i++) {
-        passengerData[i].shmid = shmid;
-        passengerData[i].semid = semid;
-        passengerData[i].passengerID = i + 1;
-
-        if (pthread_create(&passengers[i], NULL, Passenger, &passengerData[i]) != 0) {
-            perror(RED "Error creating passenger thread" RESET);
+    pid_t harbourCaptainPid = fork();
+    if (harbourCaptainPid == -1) {
+        perror(RED "Error forking for harbourCaptain" RESET);
+        exit(EXIT_FAILURE);
+    } else if (harbourCaptainPid == 0) {
+        close(pipefd[1]); // Close writing
+        char readFdStr[10];
+        sprintf(readFdStr, "%d", pipefd[0]); // We pass the reading descriptor
+        if (execl("./harbourCaptain", "harbourCaptain", readFdStr, NULL) == -1) {
+            perror(RED "execl harbourCaptain" RESET);
             exit(EXIT_FAILURE);
         }
-
-        // <0.1s; 2s>
-        int delay = rand() % 2000 + 100; 
-        usleep(delay * 1000);
     }
 
-    // Waiting for thread termination
+    close(pipefd[0]); // We close both ends of the pipe in the main process
+    close(pipefd[1]);
+
     for (int i = 0; i < NUM_PASSENGERS; i++) {
-        pthread_join(passengers[i], NULL);
+        pid_t pid = fork();
+        if (pid == -1) {
+            perror(RED "Error forking passenger" RESET);
+            exit(EXIT_FAILURE);
+        } else if (pid == 0) {
+            if (execl("./passenger", "passenger", shmStr, semStr, NULL) == -1) {
+                perror(RED "execl passenger" RESET);
+                exit(EXIT_FAILURE);
+            }
+        }
     }
 
     // Waiting for the captains to finish

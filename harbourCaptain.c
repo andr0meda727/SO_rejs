@@ -2,13 +2,21 @@
 
 int main(int argc, char *argv[]) {
     if (argc != 2) {
-        fprintf(stderr, RED "Usage: %s <shipCaptainPID>" RESET "\n", argv[0]);
+        fprintf(stderr, RED "Usage: %s <readFd>" RESET "\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    pid_t shipCaptainPID = (pid_t)atoi(argv[1]);
+    int readFd = atoi(argv[1]);
+    pid_t shipCaptainPID;
+    // Read PID from pipe
+    if (read(readFd, &shipCaptainPID, sizeof(shipCaptainPID)) == -1) {
+        perror(RED "read from pipe" RESET);
+        exit(EXIT_FAILURE);
+    }
+    printf(MAGENTA "=== Harbour Captain ===" RESET " The PID of the ship's captain was received: %d\n", shipCaptainPID);
  
     launchHarbourCaptain(shipCaptainPID);
+    close(readFd); // Closing pipe after reading
     
     return 0;
 }

@@ -10,6 +10,18 @@ int main(int argc, char *argv[]) {
 
     int shmid = atoi(argv[1]);
     int semid = atoi(argv[2]);
+    int writeFd = atoi(argv[3]);
+
+    pid_t myPID = getpid();
+
+    // Save the PID to pipe
+    if (write(writeFd, &myPID, sizeof(myPID)) == -1) {
+        perror(RED "write to pipe" RESET);
+        exit(EXIT_FAILURE);
+    }
+    printf(YELLOW "=== Ship Captain ===" RESET " PID was sent to the harbour captain.\n");
+    close(writeFd); // We close the pipe after sending the PID
+
 
     launchShipCaptain(shmid, semid);
 
@@ -29,7 +41,7 @@ void handle_signal(int sig) {
         printf(YELLOW "=== Ship Captain ===" RESET " Early departure signal has been received\n");
         waitSemaphore(shmidToSignal, SEM_MUTEX);
         sm->signalEarlyVoyage = 1;
-        sm->queueDirection = 1; // queue towards land, so passenger can't enter
+        sm->queueDirection = 1; // queue towards land, so passenger can't enter 
         signalSemaphore(shmidToSignal, SEM_MUTEX);
     } else if (sig == SIGUSR2) {
         waitSemaphore(shmidToSignal, SEM_MUTEX);
