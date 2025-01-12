@@ -41,11 +41,16 @@ void handle_signal(int sig) {
     }
 
     if (sig == SIGUSR1) {
-        earlyVoyage = 1;
         waitSemaphore(semid, SEM_MUTEX);
-        sm->queueDirection = 1; // queue towards land, so passenger can't enter 
-        sm->shipSailing = 1;
-        signalSemaphore(semid, SEM_MUTEX);
+        if (sm->shipSailing) {
+            // printf(YELLOW "=== Ship Captain ===" RESET " I'm currently sailing, the signal cannot be made.\n");
+            signalSemaphore(semid, SEM_MUTEX);
+        } else {
+            earlyVoyage = 1;
+            sm->queueDirection = 1; // queue towards land, so passenger can't enter 
+            sm->shipSailing = 1;
+            signalSemaphore(semid, SEM_MUTEX);
+        }
     } else if (sig == SIGUSR2) {
         waitSemaphore(semid, SEM_MUTEX);
         sm->signalEndOfDay = 1;
@@ -67,7 +72,7 @@ void launchShipCaptain(int shmid, int semid) {
     struct sigaction sa;
     sa.sa_handler = handle_signal;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART;
+    sa.sa_flags = 0;
 
 
     if (sigaction(SIGUSR1, &sa, NULL) == -1) {
@@ -178,24 +183,30 @@ void launchShipCaptain(int shmid, int semid) {
             usleep(100000); // 0.1s
         }
 
-        waitSemaphore(semid, SEM_MUTEX);
-        sm->shipSailing = 1;
-        sm->queueDirection = 1; 
-        signalSemaphore(semid, SEM_MUTEX);
-
-
         // Cruise starting
         waitSemaphore(semid, SEM_MUTEX);
         int voyageNumber = sm->currentVoyage + 1;
         int peopleOnVoyage = sm->peopleOnShip;
-        int passengersLeft = sm->peopleOnBridge;
         signalSemaphore(semid, SEM_MUTEX);
 
         printf(YELLOW "=== Ship Captain ===" RESET " All passengers have descended. We sail away.\n");
         printf(YELLOW "=== Ship Captain ===" RESET " Sailing on cruise %d with %d passengers.\n", voyageNumber, peopleOnVoyage);
 
         // Simulation of cruise
-        sleep(TRIP_DURATION);
+        struct timespec req, rem;
+        req.tv_sec = TRIP_DURATION;
+        req.tv_nsec = 0;
+
+        // Loop to ensure the full trip duration is completed
+        while (nanosleep(&req, &rem) == -1) {
+            if (errno == EINTR) {
+                printf(YELLOW "=== Ship Captain ===" RESET " Signal received during voyage, resuming sleep...\n");
+                req = rem; // Use remaining time to continue sleeping
+            } else {
+                perror(RED "nanosleep" RESET);
+                exit(EXIT_FAILURE);
+            }
+        }
 
         waitSemaphore(semid, SEM_MUTEX);
         sm->shipSailing = 0;       // end of cruise

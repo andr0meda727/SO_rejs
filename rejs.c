@@ -1,5 +1,4 @@
 #include "utils.h"
-#include "passenger.h"
 
 #define NUM_PASSENGERS 100
 
