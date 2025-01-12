@@ -1,18 +1,21 @@
 #include "utils.h"
 
-int shmidToSignal;
+int shmid, semid;
+int earlyVoyage = 0;
 
 int main(int argc, char *argv[]) {
-    if (argc != 3) {
-        fprintf(stderr, RED "Usage: %s <shmid> <semid>" RESET "\n", argv[0]);
+    if (argc != 4) {
+        fprintf(stderr, RED "Usage: %s <shmid> <semid> <writeFd>" RESET "\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    int shmid = atoi(argv[1]);
-    int semid = atoi(argv[2]);
+    shmid = atoi(argv[1]);
+    semid = atoi(argv[2]);
     int writeFd = atoi(argv[3]);
 
     pid_t myPID = getpid();
+
+    printf(YELLOW "=== Ship Captain ===" RESET " Starting\n");
 
     // Save the PID to pipe
     if (write(writeFd, &myPID, sizeof(myPID)) == -1) {
@@ -30,7 +33,7 @@ int main(int argc, char *argv[]) {
 
 
 void handle_signal(int sig) {
-    SharedMemory *sm = attachSharedMemory(shmidToSignal);
+    SharedMemory *sm = attachSharedMemory(shmid);
     
     if (sm == (void *)-1) {
         perror(RED "shmat in signal handler" RESET);
@@ -38,16 +41,16 @@ void handle_signal(int sig) {
     }
 
     if (sig == SIGUSR1) {
-        printf(YELLOW "=== Ship Captain ===" RESET " Early departure signal has been received\n");
-        waitSemaphore(shmidToSignal, SEM_MUTEX);
-        sm->signalEarlyVoyage = 1;
+        earlyVoyage = 1;
+        waitSemaphore(semid, SEM_MUTEX);
         sm->queueDirection = 1; // queue towards land, so passenger can't enter 
-        signalSemaphore(shmidToSignal, SEM_MUTEX);
+        sm->shipSailing = 1;
+        signalSemaphore(semid, SEM_MUTEX);
     } else if (sig == SIGUSR2) {
-        waitSemaphore(shmidToSignal, SEM_MUTEX);
+        waitSemaphore(semid, SEM_MUTEX);
         sm->signalEndOfDay = 1;
         sm->queueDirection = 1; // queue towards land, so passenger can't enter
-        signalSemaphore(shmidToSignal, SEM_MUTEX);
+        signalSemaphore(semid, SEM_MUTEX);
     }
 
     shmdt(sm); // Detach after updating
@@ -55,7 +58,6 @@ void handle_signal(int sig) {
 
 void launchShipCaptain(int shmid, int semid) {
     SharedMemory *sm = attachSharedMemory(shmid);
-    shmidToSignal = shmid;
 
     if (sm == (void *)-1) {
         perror(RED "shmat ship captain" RESET);
@@ -78,11 +80,10 @@ void launchShipCaptain(int shmid, int semid) {
         exit(EXIT_FAILURE);
     }
 
-    printf(YELLOW "=== Ship Captain ===" RESET " Starting\n");
-
     while (1) {
         waitSemaphore(semid, SEM_MUTEX);
         if (sm->currentVoyage >= NUMBER_OF_TRIPS_PER_DAY) {
+            sm->queueDirection = 1;
             signalSemaphore(semid, SEM_MUTEX);
             printf(YELLOW "=== Ship Captain ===" RESET " Reached daily trip limit %d. Ending work.\n", NUMBER_OF_TRIPS_PER_DAY);
             shmdt(sm);
@@ -95,7 +96,7 @@ void launchShipCaptain(int shmid, int semid) {
         while (slept < TIME_BETWEEN_TRIPS) {
             waitSemaphore(semid, SEM_MUTEX); // Lock
             int endOfDay = sm->signalEndOfDay;
-            int earlyVoyage = sm->signalEarlyVoyage;
+            int numberOfPeopleOnShip = sm->peopleOnShip;
             signalSemaphore(semid, SEM_MUTEX); // Unlock
 
             if (endOfDay) {
@@ -136,20 +137,35 @@ void launchShipCaptain(int shmid, int semid) {
                     signalSemaphore(semid, SEM_MUTEX);
 
                     if (peopleOnBridge == 0) {
-                        printf(YELLOW "=== Ship Captain ===" RESET " Bridge is empty. Departing early.\n");
                         break;
                     }
 
                     usleep(100000); // 0.1s
                 }
+                waitSemaphore(semid, SEM_MUTEX);
+                earlyVoyage = 0;
+                signalSemaphore(semid, SEM_MUTEX);
 
                 break; // Going to departure
+            }
+
+            if (numberOfPeopleOnShip >= SHIP_CAPACITY) {
+                waitSemaphore(semid, SEM_MUTEX);
+                sm->queueDirection = 1;
+                signalSemaphore(semid, SEM_MUTEX);
             }
 
             sleep(1);
             slept++;
         }
 
+        printf(YELLOW "=== Ship Captain ===" RESET " All the people on the bridge have to go ashore, we are sailing away!\n");
+        waitSemaphore(semid, SEM_MUTEX);
+        sm->queueDirection = 1; // queue towards land, so passenger can't enter 
+        sm->shipSailing = 1;
+        signalSemaphore(semid, SEM_MUTEX);
+
+        // Waiting for all passengers to pass
         while (1) {
             waitSemaphore(semid, SEM_MUTEX);
             int peopleOnBridge = sm->peopleOnBridge;
@@ -162,31 +178,32 @@ void launchShipCaptain(int shmid, int semid) {
             usleep(100000); // 0.1s
         }
 
+        waitSemaphore(semid, SEM_MUTEX);
+        sm->shipSailing = 1;
+        sm->queueDirection = 1; 
+        signalSemaphore(semid, SEM_MUTEX);
+
 
         // Cruise starting
         waitSemaphore(semid, SEM_MUTEX);
-        sm->currentVoyage++;
-        int voyageNumber = sm->currentVoyage;
+        int voyageNumber = sm->currentVoyage + 1;
         int peopleOnVoyage = sm->peopleOnShip;
+        int passengersLeft = sm->peopleOnBridge;
         signalSemaphore(semid, SEM_MUTEX);
 
+        printf(YELLOW "=== Ship Captain ===" RESET " All passengers have descended. We sail away.\n");
         printf(YELLOW "=== Ship Captain ===" RESET " Sailing on cruise %d with %d passengers.\n", voyageNumber, peopleOnVoyage);
 
         // Simulation of cruise
         sleep(TRIP_DURATION);
 
-        // Cruise end
-        printf(YELLOW "=== Ship Captain ===" RESET " Cruise %d has ended. Arriving at port.\n", voyageNumber);
-
-
-
-        printf(YELLOW "=== Ship Captain ===" RESET " Sailing on cruise %d with %d passengers.\n", voyageNumber, peopleOnVoyage);
-        sleep(TRIP_DURATION);
-
-        // Disembarkation
         waitSemaphore(semid, SEM_MUTEX);
-        sm->queueDirection = 1; // towards land
+        sm->shipSailing = 0;       // end of cruise
+        sm->queueDirection = 1;    // towards land to disembark
+        sm->currentVoyage++;
         signalSemaphore(semid, SEM_MUTEX);
+        
+        printf(YELLOW "=== Ship Captain ===" RESET " Cruise %d has ended. Arriving at port.\n", voyageNumber);
 
         // Waiting for all passengers to get off
         while (1) {

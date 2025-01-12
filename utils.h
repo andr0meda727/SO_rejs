@@ -24,8 +24,8 @@
 
 #define SHIP_CAPACITY 100
 #define BRIDGE_CAPACITY 10
-#define TIME_BETWEEN_TRIPS 60 // [s]
-#define TRIP_DURATION 30 // [s]
+#define TIME_BETWEEN_TRIPS 6 // [s]
+#define TRIP_DURATION 5 // [s]
 #define NUMBER_OF_TRIPS_PER_DAY 5
 
 #define SHM_PROJECT_ID 'A'
@@ -39,9 +39,9 @@ typedef struct {
     int peopleOnShip;
     int peopleOnBridge;
     int currentVoyage;      // Current number of completed voyages
-    int signalEarlyVoyage;  // Signal 1
     int signalEndOfDay;     // Signal 2
     int queueDirection;     // 0 = towards ship, 1 = towards land
+    int shipSailing;    // 0 = in port, 1 = on cruise
 } SharedMemory;
 
 void handleInput();

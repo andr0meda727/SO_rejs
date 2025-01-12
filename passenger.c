@@ -1,135 +1,150 @@
-#include "passenger.h"
 #include "utils.h"
 
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        fprintf(stderr, RED "Usage: %s <shmid> <semid>" RESET "\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
 
-void *Passenger(void *arg) {
-    PassengerData *pd = (PassengerData *)arg;
+    int shmid = atoi(argv[1]);
+    int semid = atoi(argv[2]);
 
-    SharedMemory *sm = (SharedMemory *)shmat(pd->shmid, NULL, 0);
+    SharedMemory *sm = attachSharedMemory(shmid);
     if (sm == (void *)-1) {
-        perror("shmat passenger");
-        pthread_exit(NULL);
+        perror(RED "shmat passenger" RESET);
+        exit(EXIT_FAILURE);
     }
 
-    printf(CYAN "=== Passenger %d ===\033" RESET " Starting\n", pd->passengerID);
+    printf(CYAN "=== Passenger %d ===" RESET " I'm entering the port!\n", getpid());
 
-    // Trying to enter bridge
+    int onShip = 0;  // flag: am I already on the ship?
+
     while (1) {
-        // Check for end-of-day signal before entering the bridge
-        waitSemaphore(pd->semid, SEM_MUTEX);
+        // Check signals endOfDay, earlyVoyage in the critical section
+        waitSemaphore(semid, SEM_MUTEX);
         int endOfDay = sm->signalEndOfDay;
-        int earlyVoyage = sm->signalEarlyVoyage;
-        signalSemaphore(pd->semid, SEM_MUTEX);
+        int shipSail = sm->shipSailing;
+        int queueDir = sm->queueDirection;
+        int shipFull = (sm->peopleOnShip >= SHIP_CAPACITY);
+        signalSemaphore(semid, SEM_MUTEX);
 
+        // 1. End of the day -> exit
         if (endOfDay) {
-            printf(CYAN "=== Passenger %d ===" RESET " End-of-day signal detected. Exiting.\n", pd->passengerID);
+            if (onShip) {
+                // Disembarking after signal
+                waitSemaphore(semid, SEM_BRIDGE);
+                waitSemaphore(semid, SEM_MUTEX);
+                sm->peopleOnShip--;
+                sm->peopleOnBridge++;
+                printf(CYAN "=== Passenger %d ===" RESET " End of day signal received. I'm getting off the ship. PEOPLE ON SHIP LEFT: %d, PEOPLE ON BRIDGE LEFT: %d\n", getpid(), sm->peopleOnShip, sm->peopleOnBridge);
+                signalSemaphore(semid, SEM_MUTEX);
+
+                sleep(1); // simulation of disembarking
+
+                waitSemaphore(semid, SEM_MUTEX);
+                sm->peopleOnBridge--;
+                printf(CYAN "=== Passenger %d ===" RESET " I left the bridge. Exiting port. PEOPLE ON SHIP LEFT: %d, PEOPLE ON BRIDGE LEFT: %d\n", getpid(), sm->peopleOnShip, sm->peopleOnBridge);
+                signalSemaphore(semid, SEM_MUTEX);
+                signalSemaphore(semid, SEM_BRIDGE); // Free the space on the bridge
+            } else {
+                // People waiting in port also exit
+                printf(CYAN "=== Passenger %d ===" RESET " Exiting port.\n", getpid());
+            }
+
             break;
         }
 
-        if (earlyVoyage) {
-            printf(CYAN "=== Passenger %d ===" RESET " Early departure signal detected. Exiting.\n", pd->passengerID);
-            break;
+        // 2. If I haven't boarded yet then try to board
+        if (!onShip) {
+            // Boarding conditions: 
+            // * queueDirection=0 (bridge towards the ship),
+            // * shipSailing=0 (ship in port),
+            // * !shipFull
+
+            // First, I wait for the bridge semaphore
+            waitSemaphore(semid, SEM_BRIDGE);
+
+            // Critical section
+            waitSemaphore(semid, SEM_MUTEX);
+            // reload the current parameters again (they may have changed in the meantime)
+            queueDir = sm->queueDirection;
+            shipSail = sm->shipSailing;
+            shipFull = (sm->peopleOnShip >= SHIP_CAPACITY);
+
+            if (queueDir == 0 && shipSail == 0 && !shipFull) {
+                // I can board the bridge
+                sm->peopleOnBridge++;
+                printf(CYAN "=== Passenger %d ===" RESET " I entered the bridge. PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE: %d\n", getpid(), sm->peopleOnShip, sm->peopleOnBridge);
+                signalSemaphore(semid, SEM_MUTEX);
+                // Simulation of crossing the bridge
+                sleep(1);
+
+                // Attempt to board the ship, again checking conditions
+                waitSemaphore(semid, SEM_MUTEX);
+                if (sm->peopleOnShip < SHIP_CAPACITY && sm->queueDirection == 0 && sm->shipSailing == 0) {
+                    sm->peopleOnShip++;
+                    sm->peopleOnBridge--;
+                    // Boarded so changing to 1
+                    onShip = 1;
+                    printf(CYAN "=== Passenger %d ===" RESET " I boarded the ship (voyage no. %d). PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE: %d\n", getpid(), sm->currentVoyage + 1, sm->peopleOnShip, sm->peopleOnBridge);
+                    signalSemaphore(semid, SEM_MUTEX);
+
+                    // Release the bridge semaphore
+                    signalSemaphore(semid, SEM_BRIDGE);
+                } else {
+                    // In the meantime, the ship has become full or the queueDirection has changed
+                    sm->peopleOnBridge--;
+                    printf(CYAN "=== Passenger %d ===" RESET " I cannot enter ship. I'm leaving the bridge. PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE LEFT: %d\n", getpid(), sm->peopleOnShip, sm->peopleOnBridge);
+                    signalSemaphore(semid, SEM_MUTEX);
+
+                    signalSemaphore(semid, SEM_BRIDGE);
+                    // wait for a moment and try again
+                    usleep(200000);
+                }
+            } else {
+                printf(CYAN "=== Passenger %d ===" RESET " I cannot enter bridge. PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE: %d\n", getpid(), sm->peopleOnShip, sm->peopleOnBridge);
+                signalSemaphore(semid, SEM_MUTEX);
+                signalSemaphore(semid, SEM_BRIDGE);
+                usleep(2000000);
+            }
         }
+        else {
+            // 3. If I'm on the ship (onShip=1):
+            // I wait for the voyage to end => shipSailing=0,
+            // and queueDirection=1 (bridge towards the land) to disembark
+            waitSemaphore(semid, SEM_MUTEX);
+            int nowSail = sm->shipSailing;
+            int nowqueueDir = sm->queueDirection;
+            signalSemaphore(semid, SEM_MUTEX);
 
-        // with error checking
-        // if (semop(pd->semid, SEM_BRIDGE, -1) == -1) {
-        //     perror("semop SEM_BRIDGE -1 passenger");
-        //     pthread_exit(NULL);
-        // }
+            if (nowSail == 0 && nowqueueDir == 1) {
+                // Can disembark
+                waitSemaphore(semid, SEM_BRIDGE);
+                waitSemaphore(semid, SEM_MUTEX);
+                sm->peopleOnShip--;
+                sm->peopleOnBridge++;
+                printf(CYAN "=== Passenger %d ===" RESET " Disembarking from ship. PEOPLE ON SHIP LEFT: %d, PEOPLE ON BRIDGE: %d\n", getpid(), sm->peopleOnShip, sm->peopleOnBridge);
+                signalSemaphore(semid, SEM_MUTEX);
 
-        waitSemaphore(pd->semid, SEM_BRIDGE);
+                // simulation of crossing the bridge
+                sleep(1);
 
-        // Check bridge direction and ship availability
-        waitSemaphore(pd->semid, SEM_MUTEX);
-        if (sm->queueDirection == 1) {
-            // Bridge towards land, cannot be entered
-            signalSemaphore(pd->semid, SEM_MUTEX);
-            // Freeup bridge
-            signalSemaphore(pd->semid, SEM_BRIDGE);
-            printf(CYAN "=== Passenger %d ===" RESET " Bridge direction towards land. Cannot board. Exiting.\n", pd->passengerID);
-            break;
+                // successfully disembarked
+                waitSemaphore(semid, SEM_MUTEX);
+                sm->peopleOnBridge--;
+                printf(CYAN "=== Passenger %d ===" RESET " Left bridge. PEOPLE ON SHIP LEFT: %d, PEOPLE ON BRIDGE LEFT: %d\n", getpid(), sm->peopleOnShip, sm->peopleOnBridge);
+                signalSemaphore(semid, SEM_MUTEX);
+
+                signalSemaphore(semid, SEM_BRIDGE);
+
+                break; // end of the passenger process
+            }
+
+            // otherwise, continue waiting
+            usleep(200000);
         }
-
-        if (sm->peopleOnShip >= SHIP_CAPACITY) {
-            // Ship full
-            signalSemaphore(pd->semid, SEM_MUTEX);
-            // Freeup bridge
-            signalSemaphore(pd->semid, SEM_BRIDGE);
-            printf(CYAN "=== Passenger %d ===" RESET " Ship is full. Leaving bridge. Exiting.\n", pd->passengerID);
-            break;
-        }
-
-        // Enter bridge
-        sm->peopleOnBridge++;
-        printf(CYAN "=== Passenger %d ===" RESET " Entered the bridge. People on bridge: %d / %d\n", pd->passengerID, sm->peopleOnBridge, BRIDGE_CAPACITY);
-        signalSemaphore(pd->semid, SEM_MUTEX);
-
-        // Going through bridge
-        sleep(1);
-
-        // Trying to enter ship
-        waitSemaphore(pd->semid, SEM_MUTEX);
-        if (sm->peopleOnShip < SHIP_CAPACITY) {
-            sm->peopleOnShip++;
-            sm->peopleOnBridge--;
-            printf(CYAN "=== Passenger %d ===" RESET " Boarded the ship. People on ship: %d / %d\n", 
-                pd->passengerID, sm->peopleOnShip, SHIP_CAPACITY);
-            signalSemaphore(pd->semid, SEM_MUTEX);
-
-            // Freeup bridge
-            signalSemaphore(pd->semid, SEM_BRIDGE);
-        } else {
-            // Ship full while passenger was on bridge
-            sm->peopleOnBridge--;
-            signalSemaphore(pd->semid, SEM_MUTEX);
-            // Freeup bridge
-            signalSemaphore(pd->semid, SEM_BRIDGE);
-            printf(CYAN "=== Passenger %d ===" RESET " Ship became full while on bridge. Leaving bridge. Exiting.\n", pd->passengerID);
-            break;
-        }
-
-        break; // Entered ship successfully
     }
 
-
-    // Waiting for end-of-day signal or end of cruise
-    while (1) {
-        // Checking if cruises ended or signal was sent
-        waitSemaphore(pd->semid, SEM_MUTEX);
-        int cruiseEnded = (sm->queueDirection == 1 && sm->peopleOnShip > 0);
-        int endOfDay = sm->signalEndOfDay;
-        signalSemaphore(pd->semid, SEM_MUTEX);
-
-        if (cruiseEnded || endOfDay) {
-            printf(CYAN "=== Passenger %d ===" RESET " Cruise ended or end-of-day. Disembarking.\n", pd->passengerID);
-
-            // Going off
-            waitSemaphore(pd->semid, SEM_MUTEX);
-            sm->peopleOnShip--;
-            sm->peopleOnBridge++;
-            printf(CYAN "=== Passenger %d ===" RESET " Disembarked the ship. People on ship: %d, on bridge: %d\n", pd->passengerID, sm->peopleOnShip, sm->peopleOnBridge);
-            signalSemaphore(pd->semid, SEM_MUTEX);
-
-            // Going off bridge
-            sleep(1);
-
-            // Exited bridge
-            waitSemaphore(pd->semid, SEM_MUTEX);
-            sm->peopleOnBridge--;
-            printf(CYAN "=== Passenger %d ===" RESET " Exited the bridge. People on bridge: %d\n", pd->passengerID, sm->peopleOnBridge);
-            signalSemaphore(pd->semid, SEM_MUTEX);
-
-            // Freeup bridge
-            signalSemaphore(pd->semid, SEM_BRIDGE);
-
-            break;
-        }
-
-        usleep(200000); // 0.2s
-    }
-
-    // Ending passenger thread
-    printf(CYAN "=== Passenger %d ===" RESET " Finished the day and exited.\n", pd->passengerID);
-    // shmdt(sm);
-    pthread_exit(NULL);
+    shmdt(sm);
+    return 0;
 }

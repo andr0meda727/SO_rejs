@@ -3,7 +3,7 @@
 void waitSemaphore(int semID, int number) {
    struct sembuf operation;
    operation.sem_num = number;
-   operation.sem_op = -1;
+   operation.sem_op = -1;   
    operation.sem_flg = 0;
 
    if (semop(semID, &operation, 1) == -1) {
@@ -129,6 +129,5 @@ SharedMemory* attachSharedMemory(int shmid) {
         perror(RED "shmat" RESET);
         exit(EXIT_FAILURE);
     }
-    printf(GREEN "Shared memory attached successfully." RESET "\n");
     return sm;
 }
