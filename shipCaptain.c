@@ -1,5 +1,7 @@
 #include "utils.h"
 
+volatile sig_atomic_t endOfDaySignal = 0; // Flaga dla SIGUSR2
+
 int shmid, semid;
 int earlyVoyage = 0;
 
@@ -34,16 +36,16 @@ int main(int argc, char *argv[]) {
 
 void handle_signal(int sig) {
     SharedMemory *sm = attachSharedMemory(shmid);
-    
     if (sm == (void *)-1) {
         perror(RED "shmat in signal handler" RESET);
         exit(EXIT_FAILURE);
     }
 
+
     if (sig == SIGUSR1) {
         waitSemaphore(semid, SEM_MUTEX);
         if (sm->shipSailing) {
-            // printf(YELLOW "=== Ship Captain ===" RESET " I'm currently sailing, the signal cannot be made.\n");
+            printf(YELLOW "=== Ship Captain ===" RESET " I'm currently sailing, the signal cannot be made.\n");
             signalSemaphore(semid, SEM_MUTEX);
         } else {
             earlyVoyage = 1;
@@ -52,14 +54,12 @@ void handle_signal(int sig) {
             signalSemaphore(semid, SEM_MUTEX);
         }
     } else if (sig == SIGUSR2) {
-        waitSemaphore(semid, SEM_MUTEX);
-        sm->signalEndOfDay = 1;
-        sm->queueDirection = 1; // queue towards land, so passenger can't enter
-        signalSemaphore(semid, SEM_MUTEX);
+        endOfDaySignal = 1; // Ustawienie flagi dla końca dnia
     }
-
-    shmdt(sm); // Detach after updating
+    
+    shmdt(sm);
 }
+
 
 void launchShipCaptain(int shmid, int semid) {
     SharedMemory *sm = attachSharedMemory(shmid);
@@ -206,6 +206,18 @@ void launchShipCaptain(int shmid, int semid) {
                 perror(RED "nanosleep" RESET);
                 exit(EXIT_FAILURE);
             }
+        }
+
+        if (endOfDaySignal) {
+            printf(YELLOW "=== Ship Captain ===" RESET " End-of-day signal received during voyage. Ending day as per signal.\n");
+
+            waitSemaphore(semid, SEM_MUTEX);
+            sm->signalEndOfDay = 1;
+            sm->queueDirection = 1; // queue towards land, so passenger can't enter
+            signalSemaphore(semid, SEM_MUTEX);
+
+            shmdt(sm);
+            return;
         }
 
         waitSemaphore(semid, SEM_MUTEX);
