@@ -1,32 +1,43 @@
 #include "utils.h"
 
-volatile sig_atomic_t endOfDaySignal = 0; // Flaga dla SIGUSR2
+volatile sig_atomic_t endOfDaySignal = 0; // Flag for sigusr2
 
 int shmid, semid;
 int earlyVoyage = 0;
 
 int main(int argc, char *argv[]) {
-    if (argc != 4) {
-        fprintf(stderr, RED "Usage: %s <shmid> <semid> <writeFd>" RESET "\n", argv[0]);
+    if (argc != 3) {
+        fprintf(stderr, RED "Usage: %s <shmid> <semid>" RESET "\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
     shmid = atoi(argv[1]);
     semid = atoi(argv[2]);
-    int writeFd = atoi(argv[3]);
-
-    pid_t myPID = getpid();
 
     printf(YELLOW "=== Ship Captain ===" RESET " Starting\n");
 
-    // Save the PID to pipe
-    if (write(writeFd, &myPID, sizeof(myPID)) == -1) {
-        perror(RED "write to pipe" RESET);
+    // Create FIFO for communication from ship captain
+    if (mkfifo(FIFO_PATH, 0666) == -1) {
+        perror(RED "mkfifo" RESET);
         exit(EXIT_FAILURE);
     }
-    printf(YELLOW "=== Ship Captain ===" RESET " PID was sent to the harbour captain.\n");
-    close(writeFd); // We close the pipe after sending the PID
 
+    int fifo_fd = open(FIFO_PATH, O_WRONLY);
+    if (fifo_fd == -1) {
+        perror("open fifo");
+        exit(EXIT_FAILURE);
+    }
+
+    pid_t myPID = getpid();
+
+    // Writing PID to FIFO
+    if (write(fifo_fd, &myPID, sizeof(myPID)) == -1) {
+        perror(RED "write to FIFO" RESET);
+        exit(EXIT_FAILURE);
+    }
+
+    printf(YELLOW "=== Ship Captain ===" RESET " PID was sent to the harbour captain.\n");
+    close(fifo_fd); // Closing FIFO
 
     launchShipCaptain(shmid, semid);
 
@@ -54,7 +65,20 @@ void handle_signal(int sig) {
             signalSemaphore(semid, SEM_MUTEX);
         }
     } else if (sig == SIGUSR2) {
-        endOfDaySignal = 1; // Ustawienie flagi dla końca dnia
+        int shipSailing;
+
+        // Critical section
+        waitSemaphore(semid, SEM_MUTEX);
+        shipSailing = sm->shipSailing;
+        if (!shipSailing) {
+            sm->signalEndOfDay = 1; // Set the flag in shared memory
+        }
+        signalSemaphore(semid, SEM_MUTEX);
+
+        // Logic outside the critical section
+        if (shipSailing) {
+            endOfDaySignal = 1; // Local flag
+        }
     }
     
     shmdt(sm);

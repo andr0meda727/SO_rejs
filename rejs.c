@@ -12,20 +12,13 @@ void signalHandler(int sig) {
     }
     cleanupSharedMemory(shmid);
     cleanupSemaphores(semid);
+    unlink(FIFO_PATH); // Delete FIFO file
     printf(GREEN "Cleanup complete, exiting.\n" RESET);
     exit(0);
 }
 
 int main() {
     handleInput();
-
-    // pipefd[0] - read
-    // pipefd[1] - write
-    int pipefd[2];
-    if (pipe(pipefd) == -1) {
-        perror(RED "pipe" RESET);
-        exit(EXIT_FAILURE);
-    }
 
     shmid = initializeSharedMemory();
     sm = attachSharedMemory(shmid);
@@ -55,10 +48,7 @@ int main() {
         perror(RED "Error forking for shipCaptain" RESET);
         exit(EXIT_FAILURE);
     } else if (shipCaptainPid == 0) {
-        close(pipefd[0]); // Close reading
-        char writeFdStr[10];
-        sprintf(writeFdStr, "%d", pipefd[1]); // We pass the writing descriptor
-        if (execl("./shipCaptain", "shipCaptain", shmStr, semStr, writeFdStr, NULL) == -1) {
+        if (execl("./shipCaptain", "shipCaptain", shmStr, semStr, NULL) == -1) {
             perror(RED "execl shipCaptain" RESET);
             exit(EXIT_FAILURE);
         }
@@ -69,17 +59,11 @@ int main() {
         perror(RED "Error forking for harbourCaptain" RESET);
         exit(EXIT_FAILURE);
     } else if (harbourCaptainPid == 0) {
-        close(pipefd[1]); // Close writing
-        char readFdStr[10];
-        sprintf(readFdStr, "%d", pipefd[0]); // We pass the reading descriptor
-        if (execl("./harbourCaptain", "harbourCaptain", readFdStr, NULL) == -1) {
+        if (execl("./harbourCaptain", "harbourCaptain", NULL) == -1) {
             perror(RED "execl harbourCaptain" RESET);
             exit(EXIT_FAILURE);
         }
     }
-
-    close(pipefd[0]); // We close both ends of the pipe in the main process
-    close(pipefd[1]);
 
     srand(time(NULL));
 
@@ -108,6 +92,7 @@ int main() {
     cleanupSharedMemory(shmid);
     cleanupSemaphores(semid);
 
+    unlink(FIFO_PATH); // Delete FIFO file
     printf(GREEN "Main process finished. Cleaned up shared memory and semaphores." RESET "\n");
     return 0;
 }

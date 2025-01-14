@@ -1,22 +1,28 @@
 #include "utils.h"
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) {
-        fprintf(stderr, RED "Usage: %s <readFd>" RESET "\n", argv[0]);
+    if (argc != 1) {
+        fprintf(stderr, RED "Usage: %s" RESET "\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    int readFd = atoi(argv[1]);
-    pid_t shipCaptainPID;
-    // Read PID from pipe
-    if (read(readFd, &shipCaptainPID, sizeof(shipCaptainPID)) == -1) {
-        perror(RED "read from pipe" RESET);
+    // Opening FIFO for reading
+    int fifo_fd = open(FIFO_PATH, O_RDONLY);
+    if (fifo_fd == -1) {
+        perror(RED "open FIFO" RESET);
         exit(EXIT_FAILURE);
     }
+
+    pid_t shipCaptainPID;
+    if (read(fifo_fd, &shipCaptainPID, sizeof(shipCaptainPID)) == -1) {
+        perror(RED "read from FIFO" RESET);
+        exit(EXIT_FAILURE);
+    }
+
     printf(MAGENTA "=== Harbour Captain ===" RESET " The PID of the ship's captain was received: %d\n", shipCaptainPID);
- 
+    close(fifo_fd); // Closing FIFO
+
     launchHarbourCaptain(shipCaptainPID);
-    close(readFd); // Closing pipe after reading
     
     return 0;
 }

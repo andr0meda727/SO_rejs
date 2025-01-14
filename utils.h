@@ -1,6 +1,8 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
@@ -22,10 +24,12 @@
 #define CYAN "\033[36m"
 #define RESET "\033[0m"
 
+#define FIFO_PATH "/tmp/shipCaptainPID"
+
 #define SHIP_CAPACITY 100
 #define BRIDGE_CAPACITY 10
-#define TIME_BETWEEN_TRIPS 6 // [s]
-#define TRIP_DURATION 5 // [s]
+#define TIME_BETWEEN_TRIPS 15 // [s]
+#define TRIP_DURATION 10 // [s]
 #define NUMBER_OF_TRIPS_PER_DAY 5
 
 #define SHM_PROJECT_ID 'A'
