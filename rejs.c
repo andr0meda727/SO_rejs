@@ -1,8 +1,9 @@
 #include "utils.h"
+#include "bridge_queue.h"
 
 #define NUM_PASSENGERS 1000
 
-int shmid, semid, msgQueueID;
+int shmid, semid, msq_id;
 SharedMemory *sm;
 
 void signalHandler(int sig) {
@@ -12,6 +13,9 @@ void signalHandler(int sig) {
     }
     cleanupSharedMemory(shmid);
     cleanupSemaphores(semid);
+    if (msgctl(msq_id, IPC_RMID, NULL) == -1) {
+        perror("msgctl IPC_RMID");
+    }
     unlink(FIFO_PATH); // Delete FIFO file
     unlink(FIFO_PATH_PASSENGERS); // Delete FIFO file
     printf(GREEN "Cleanup complete, exiting.\n" RESET);
@@ -29,15 +33,16 @@ int main() {
     shmid = initializeSharedMemory();
     sm = attachSharedMemory(shmid);
     semid = initializeSemaphores();
+    msq_id = msgget(BRIDGE_QUEUE_KEY, IPC_CREAT | MSG_PERMISSIONS);
 
     // Create FIFO for communication from ship captain
-    if (mkfifo(FIFO_PATH, 0666) == -1  && errno != EEXIST) {
+    if (mkfifo(FIFO_PATH, 0600) == -1  && errno != EEXIST) {
         perror(RED "mkfifo fifo_path" RESET);
         exit(EXIT_FAILURE);
     }
 
     // FIFO for passengers
-    if (mkfifo(FIFO_PATH_PASSENGERS, 0666) == -1 && errno != EEXIST) {
+    if (mkfifo(FIFO_PATH_PASSENGERS, 0600) == -1 && errno != EEXIST) {
         perror(RED "mkfifo fifo_path_passengers" RESET);
         exit(EXIT_FAILURE);
     }
@@ -109,7 +114,7 @@ int main() {
                 exit(EXIT_FAILURE);
             }
         }
-        usleep(((rand() % 901) + 100) * 1000); // <0.1s; 2s>
+        usleep(((rand() % 101) + 100) * 1000); // <0.1s; 2s>
     }
 
     while (wait(NULL) > 0) {}
@@ -118,6 +123,9 @@ int main() {
     shmdt(sm);
     cleanupSharedMemory(shmid);
     cleanupSemaphores(semid);
+    if (msgctl(msq_id, IPC_RMID, NULL) == -1) {
+        perror("msgctl IPC_RMID");
+    }
 
     close(fifo_fd);
     unlink(FIFO_PATH); // Delete FIFO file

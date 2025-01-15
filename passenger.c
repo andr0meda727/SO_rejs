@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "bridge_queue.h"
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
@@ -17,11 +18,19 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    // Opening a queue (already exists, created by the ship captain)
+    int msq_id = msgget(BRIDGE_QUEUE_KEY, 0);
+    if (msq_id == -1) {
+        perror("msgget passenger");
+        exit(EXIT_FAILURE);
+    }
+
     pid_t myPID = getpid();
 
     printf(CYAN "=== Passenger %d ===" RESET " I'm entering the port!\n", getpid());
 
     int onShip = 0;  // flag: am I already on the ship?
+    int mySequence = -1; // unique sequence number
 
     while (1) {
         // Check signals endOfDay, earlyVoyage in the critical section
@@ -73,7 +82,7 @@ int main(int argc, char *argv[]) {
             // reload the current parameters again (they may have changed in the meantime)
             queueDir = sm->queueDirection;
             shipSail = sm->shipSailing;
-            shipFull = (sm->peopleOnShip >= SHIP_CAPACITY);
+            shipFull = (sm->peopleOnShip + sm->peopleOnBridge + 1 > SHIP_CAPACITY);
 
             if (queueDir == 0 && shipSail == 0 && !shipFull) {
                 // I can board the bridge
@@ -81,13 +90,50 @@ int main(int argc, char *argv[]) {
                 printf(CYAN "=== Passenger %d ===" RESET " I entered the bridge. PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE: %d\n", getpid(), sm->peopleOnShip, sm->peopleOnBridge);
                 signalSemaphore(semid, SEM_MUTEX);
 
-                sleep(1); // simulation
+                // Send to captain MSG_ENTER_BRIDGE
+                BridgeMsg msg;
+                msg.mtype = MSG_ENTER_BRIDGE;
+                msg.pid = myPID;
+                msg.sequence = -1;  // so far we do not know
+                if (msgsnd(msq_id, &msg, sizeof(msg) - sizeof(long), 0) == -1) {
+                    perror("msgsnd ENTER_BRIDGE");
+                }
+
+                // Answer MSG_SEQUENCE_REPLY
+                BridgeMsg reply;
+                if (msgrcv(msq_id, &reply, sizeof(reply) - sizeof(long), MSG_SEQUENCE_REPLY, 0) == -1) {
+                    perror("msgrcv MSG_SEQUENCE_REPLY");
+                } else {
+                    mySequence = reply.sequence;
+                    // printf(CYAN "=== Passenger %d ===" RESET
+                    //         " Got sequence=%d from captain.\n", myPID, mySequence);
+                }
+
+                sleep(rand() % 3 + 1); // random walking simulation
 
                 // Attempt to board the ship, again checking conditions
                 waitSemaphore(semid, SEM_MUTEX);
                 if (sm->peopleOnShip < SHIP_CAPACITY && sm->queueDirection == 0 && sm->shipSailing == 0) {
+                    // 1) We send to the captain: I want to get in (I have a sequence)
+                    BridgeMsg boardReq;
+                    boardReq.mtype = MSG_WANT_TO_BOARD;
+                    boardReq.pid = myPID;
+                    boardReq.sequence = mySequence;
+
+                    signalSemaphore(semid, SEM_MUTEX); 
+                    if (msgsnd(msq_id, &boardReq, sizeof(boardReq) - sizeof(long), 0) == -1) {
+                        perror("msgsnd WANT_TO_BOARD");
+                    }
+
+                    // 2) Waiting for a response (mtype = my PID)
+                    BridgeMsg boardOk;
+                    if (msgrcv(msq_id, &boardOk, sizeof(boardOk) - sizeof(long), myPID, 0) == -1) {
+                        perror("msgrcv myPID -> boarding OK");
+                    }
+                    
+                    waitSemaphore(semid, SEM_MUTEX);
                     sm->peopleOnShip++;
-                    sm->peopleOnBridge--;
+                    sm->peopleOnBridge--; // to dac wczesniej, bo sytuacja ze czekal w kolejce i cos sie skurwilo
                     // Boarded so changing to 1
                     onShip = 1;
                     printf(CYAN "=== Passenger %d ===" RESET " I boarded the ship (voyage no. %d). PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE: %d\n", getpid(), sm->currentVoyage + 1, sm->peopleOnShip, sm->peopleOnBridge);
@@ -106,7 +152,7 @@ int main(int argc, char *argv[]) {
                     usleep(200000);
                 }
             } else {
-                printf(CYAN "=== Passenger %d ===" RESET " I cannot enter bridge. PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE: %d\n", getpid(), sm->peopleOnShip, sm->peopleOnBridge);
+                // printf(CYAN "=== Passenger %d ===" RESET " I cannot enter bridge. PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE: %d\n", getpid(), sm->peopleOnShip, sm->peopleOnBridge);
                 signalSemaphore(semid, SEM_MUTEX);
                 signalSemaphore(semid, SEM_BRIDGE);
                 usleep(2000000);
