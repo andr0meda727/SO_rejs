@@ -6,6 +6,8 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    srand(time(NULL));
+
     int shmid = atoi(argv[1]);
     int semid = atoi(argv[2]);
 
@@ -14,6 +16,8 @@ int main(int argc, char *argv[]) {
         perror(RED "shmat passenger" RESET);
         exit(EXIT_FAILURE);
     }
+
+    pid_t myPID = getpid();
 
     printf(CYAN "=== Passenger %d ===" RESET " I'm entering the port!\n", getpid());
 
@@ -76,8 +80,8 @@ int main(int argc, char *argv[]) {
                 sm->peopleOnBridge++;
                 printf(CYAN "=== Passenger %d ===" RESET " I entered the bridge. PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE: %d\n", getpid(), sm->peopleOnShip, sm->peopleOnBridge);
                 signalSemaphore(semid, SEM_MUTEX);
-                // Simulation of crossing the bridge
-                sleep(1);
+
+                sleep(1); // simulation
 
                 // Attempt to board the ship, again checking conditions
                 waitSemaphore(semid, SEM_MUTEX);
@@ -111,7 +115,7 @@ int main(int argc, char *argv[]) {
         else {
             // 3. If I'm on the ship (onShip=1):
             // I wait for the voyage to end => shipSailing=0,
-            // and queueDirection=1 (bridge towards the land) to disembark
+            // and queueDirection = 1 (bridge towards the land) to disembark
             waitSemaphore(semid, SEM_MUTEX);
             int nowSail = sm->shipSailing;
             int nowqueueDir = sm->queueDirection;

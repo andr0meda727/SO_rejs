@@ -1,8 +1,8 @@
 #include "utils.h"
 
-#define NUM_PASSENGERS 100
+#define NUM_PASSENGERS 1000
 
-int shmid, semid;
+int shmid, semid, msgQueueID;
 SharedMemory *sm;
 
 void signalHandler(int sig) {
@@ -13,16 +13,34 @@ void signalHandler(int sig) {
     cleanupSharedMemory(shmid);
     cleanupSemaphores(semid);
     unlink(FIFO_PATH); // Delete FIFO file
+    unlink(FIFO_PATH_PASSENGERS); // Delete FIFO file
     printf(GREEN "Cleanup complete, exiting.\n" RESET);
     exit(0);
 }
 
 int main() {
+    if (signal(SIGINT, signalHandler) == SIG_ERR) {
+        perror(RED "Signal handler setup failed" RESET);
+        exit(1);
+    }
+
     handleInput();
 
     shmid = initializeSharedMemory();
     sm = attachSharedMemory(shmid);
     semid = initializeSemaphores();
+
+    // Create FIFO for communication from ship captain
+    if (mkfifo(FIFO_PATH, 0666) == -1  && errno != EEXIST) {
+        perror(RED "mkfifo fifo_path" RESET);
+        exit(EXIT_FAILURE);
+    }
+
+    // FIFO for passengers
+    if (mkfifo(FIFO_PATH_PASSENGERS, 0666) == -1 && errno != EEXIST) {
+        perror(RED "mkfifo fifo_path_passengers" RESET);
+        exit(EXIT_FAILURE);
+    }
 
     char shmStr[16], semStr[16];
     sprintf(shmStr, "%d", shmid);
@@ -37,11 +55,6 @@ int main() {
     sm->queueDirection = 0;
     sm->shipSailing = 0;
     signalSemaphore(semid, SEM_MUTEX);
-
-    if (signal(SIGINT, signalHandler) == SIG_ERR) {
-        perror(RED "Signal handler setup failed" RESET);
-        exit(1);
-    }
 
     pid_t shipCaptainPid = fork();
     if (shipCaptainPid == -1) {
@@ -65,9 +78,27 @@ int main() {
         }
     }
 
+    // Open FIFO for reading
+    int fifo_fd = open(FIFO_PATH_PASSENGERS, O_RDONLY | O_NONBLOCK);
+    if (fifo_fd == -1) {
+        perror(RED "open FIFO rejs" RESET);
+        exit(EXIT_FAILURE);
+    }
+
     srand(time(NULL));
 
-    for (int i = 0; i < NUM_PASSENGERS; i++) {
+    for (int i = 0; i >= 0; i++) {
+        char buffer[10]; // Buffer for message
+        ssize_t bytesRead = read(fifo_fd, buffer, sizeof(buffer));
+
+        if (bytesRead > 0) {
+            buffer[bytesRead] = '\0'; 
+            if (strcmp(buffer, "stop") == 0) {
+                printf(YELLOW "Received 'stop' signal from shipCaptain. Stopping passenger creation.\n" RESET);
+                break;
+            }
+        }
+
         pid_t pid = fork();
         if (pid == -1) {
             perror(RED "Error forking passenger" RESET);
@@ -78,21 +109,19 @@ int main() {
                 exit(EXIT_FAILURE);
             }
         }
-        usleep(((rand() % 1901) + 100) * 1000); // <0.1s; 2s>
+        usleep(((rand() % 901) + 100) * 1000); // <0.1s; 2s>
     }
 
-    // Waiting for the captains to finish
-    waitpid(shipCaptainPid, NULL, 0);
-    printf(GREEN "=== Main === Ship Captain has finished." RESET "\n");
-    waitpid(harbourCaptainPid, NULL, 0);
-    printf(GREEN "=== Main === Harbour Captain has finished." RESET "\n");
+    while (wait(NULL) > 0) {}
 
     // Cleanup
     shmdt(sm);
     cleanupSharedMemory(shmid);
     cleanupSemaphores(semid);
 
+    close(fifo_fd);
     unlink(FIFO_PATH); // Delete FIFO file
+    unlink(FIFO_PATH_PASSENGERS);
     printf(GREEN "Main process finished. Cleaned up shared memory and semaphores." RESET "\n");
     return 0;
 }

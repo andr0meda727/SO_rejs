@@ -16,11 +16,6 @@ int main(int argc, char *argv[]) {
 
     printf(YELLOW "=== Ship Captain ===" RESET " Starting\n");
 
-    // Create FIFO for communication from ship captain
-    if (mkfifo(FIFO_PATH, 0666) == -1) {
-        perror(RED "mkfifo" RESET);
-        exit(EXIT_FAILURE);
-    }
 
     int fifo_fd = open(FIFO_PATH, O_WRONLY);
     if (fifo_fd == -1) {
@@ -35,6 +30,7 @@ int main(int argc, char *argv[]) {
         perror(RED "write to FIFO" RESET);
         exit(EXIT_FAILURE);
     }
+
 
     printf(YELLOW "=== Ship Captain ===" RESET " PID was sent to the harbour captain.\n");
     close(fifo_fd); // Closing FIFO
@@ -52,7 +48,6 @@ void handle_signal(int sig) {
         exit(EXIT_FAILURE);
     }
 
-
     if (sig == SIGUSR1) {
         waitSemaphore(semid, SEM_MUTEX);
         if (sm->shipSailing) {
@@ -65,6 +60,8 @@ void handle_signal(int sig) {
             signalSemaphore(semid, SEM_MUTEX);
         }
     } else if (sig == SIGUSR2) {
+        sendStopSignal();
+
         int shipSailing;
 
         // Critical section
@@ -84,6 +81,23 @@ void handle_signal(int sig) {
     shmdt(sm);
 }
 
+void sendStopSignal() {
+    // Open FIFO for writing
+    int fifo_fd = open(FIFO_PATH_PASSENGERS, O_WRONLY);
+    if (fifo_fd == -1) {
+        perror(RED "open FIFO ship" RESET);
+        exit(EXIT_FAILURE);
+    }
+
+    const char *msg = "stop";
+    if (write(fifo_fd, msg, strlen(msg) + 1) == -1) {
+        perror(RED "write to FIFO" RESET);
+        exit(EXIT_FAILURE);
+    }
+
+    printf(YELLOW "=== Ship Captain ===" RESET " Sent 'stop' signal to main.\n");
+    close(fifo_fd);
+}
 
 void launchShipCaptain(int shmid, int semid) {
     SharedMemory *sm = attachSharedMemory(shmid);
@@ -113,8 +127,10 @@ void launchShipCaptain(int shmid, int semid) {
         waitSemaphore(semid, SEM_MUTEX);
         if (sm->currentVoyage >= NUMBER_OF_TRIPS_PER_DAY) {
             sm->queueDirection = 1;
+            sm->signalEndOfDay = 1;
             signalSemaphore(semid, SEM_MUTEX);
             printf(YELLOW "=== Ship Captain ===" RESET " Reached daily trip limit %d. Ending work.\n", NUMBER_OF_TRIPS_PER_DAY);
+            sendStopSignal();
             shmdt(sm);
             return;
         }
@@ -245,8 +261,8 @@ void launchShipCaptain(int shmid, int semid) {
         }
 
         waitSemaphore(semid, SEM_MUTEX);
-        sm->shipSailing = 0;       // end of cruise
-        sm->queueDirection = 1;    // towards land to disembark
+        sm->shipSailing = 0; // end of cruise
+        sm->queueDirection = 1; // towards land to disembark
         sm->currentVoyage++;
         signalSemaphore(semid, SEM_MUTEX);
         
