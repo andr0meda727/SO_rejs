@@ -28,11 +28,11 @@
 #define FIFO_PATH "/tmp/shipCaptainPID"
 #define FIFO_PATH_PASSENGERS "/tmp/passengers"
 
-#define SHIP_CAPACITY 10
-#define BRIDGE_CAPACITY 2
-#define TIME_BETWEEN_TRIPS 3 // [s]
-#define TRIP_DURATION 1 // [s]
-#define NUMBER_OF_TRIPS_PER_DAY 5
+#define SHIP_CAPACITY 25
+#define BRIDGE_CAPACITY 10
+#define TIME_BETWEEN_TRIPS 5 // [s]
+#define TRIP_DURATION 2 // [s]
+#define NUMBER_OF_TRIPS_PER_DAY 50
 
 #define SHM_PROJECT_ID 'A'
 #define SEM_PROJECT_ID 'B'

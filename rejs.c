@@ -96,7 +96,7 @@ int main() {
 
     srand(time(NULL));
 
-    for (int i = 0; i < 500; i++) {
+    for (int i = 0; i < 1000; i++) {
         char buffer[10]; // Buffer for message
         ssize_t bytesRead = read(fifo_fd, buffer, sizeof(buffer));
 

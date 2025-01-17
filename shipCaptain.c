@@ -192,7 +192,6 @@ void startCruisePreparation() {
         waitSemaphore(semid, SEM_MUTEX);
         int peopleOnBridge = sm->peopleOnBridge;
         signalSemaphore(semid, SEM_MUTEX);
-        printf("ppl on bridge: %d\n", peopleOnBridge);
         if (peopleOnBridge == 0) {
             break;
         }
@@ -215,7 +214,7 @@ void performVoyage() {
     int voyageNumber = sm->currentVoyage + 1;
     signalSemaphore(semid, SEM_MUTEX);
 
-    printf(YELLOW "=== Ship Captain ===" RESET " Starting voyage %d.\n", voyageNumber);
+    printf(YELLOW "=== Ship Captain ===" RESET " Starting voyage %d. TRIP DURATION: %ds\n", voyageNumber, TRIP_DURATION);
 
     //Simulation of cruise
     struct timespec req, rem;
@@ -251,8 +250,7 @@ void performDisembarkation() {
     waitSemaphore(semid, SEM_MUTEX);
     sm->shipSailing = 0; // end of cruise
     sm->queueDirection = 1; // towards land to disembark
-    sm->currentVoyage++;
-    int voyageNumber = sm->currentVoyage + 1;
+    int voyageNumber = sm->currentVoyage++;
     signalSemaphore(semid, SEM_MUTEX);
 
     printf(YELLOW "=== Ship Captain ===" RESET " Cruise %d has ended. Arriving at port.\n", voyageNumber);
