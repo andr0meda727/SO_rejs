@@ -1,0 +1,15 @@
+void initializeMessageQueue();
+void setupSignalHandlers();
+void sendPID();
+void cleanupAndExit();
+int isEndOfDayOrEarlyVoyage();
+void handleBridgeQueue();
+void checkAndBoardNextInQueue();
+void performLoading();
+void startCruisePreparation();
+void performVoyage();
+void performDisembarkation();
+void waitForAllPassengersToDisembark();
+void getReadyForNextCruise();
+void sendStopSignal();
+void handle_signal(int sig);

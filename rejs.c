@@ -8,18 +8,22 @@ SharedMemory *sm;
 
 void signalHandler(int sig) {
     // Cleaning after ctrl+c
-    if (sm != NULL) {
-        shmdt(sm);
+
+    if (sig == SIGINT) {
+        if (sm != NULL) {
+            shmdt(sm);
+        }
+
+        cleanupSharedMemory(shmid);
+        cleanupSemaphores(semid);
+        if (msgctl(msq_id, IPC_RMID, NULL) == -1) {
+            perror("msgctl IPC_RMID");
+        }
+        unlink(FIFO_PATH); // Delete FIFO file
+        unlink(FIFO_PATH_PASSENGERS); // Delete FIFO file
+        printf(GREEN "Cleanup complete, exiting.\n" RESET);
+        exit(0);
     }
-    cleanupSharedMemory(shmid);
-    cleanupSemaphores(semid);
-    if (msgctl(msq_id, IPC_RMID, NULL) == -1) {
-        perror("msgctl IPC_RMID");
-    }
-    unlink(FIFO_PATH); // Delete FIFO file
-    unlink(FIFO_PATH_PASSENGERS); // Delete FIFO file
-    printf(GREEN "Cleanup complete, exiting.\n" RESET);
-    exit(0);
 }
 
 int main() {
@@ -92,7 +96,7 @@ int main() {
 
     srand(time(NULL));
 
-    for (int i = 0; i >= 0; i++) {
+    for (int i = 0; i < 500; i++) {
         char buffer[10]; // Buffer for message
         ssize_t bytesRead = read(fifo_fd, buffer, sizeof(buffer));
 
@@ -114,7 +118,7 @@ int main() {
                 exit(EXIT_FAILURE);
             }
         }
-        usleep(((rand() % 101) + 100) * 1000); // <0.1s; 2s>
+        usleep(((rand() % 10) + 100) * 10); // <0.1s; 2s>
     }
 
     while (wait(NULL) > 0) {}
