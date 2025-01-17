@@ -29,9 +29,9 @@
 #define FIFO_PATH_PASSENGERS "/tmp/passengers"
 
 #define SHIP_CAPACITY 10
-#define BRIDGE_CAPACITY 5
-#define TIME_BETWEEN_TRIPS 30 // [s]
-#define TRIP_DURATION 15 // [s]
+#define BRIDGE_CAPACITY 2
+#define TIME_BETWEEN_TRIPS 3 // [s]
+#define TRIP_DURATION 1 // [s]
 #define NUMBER_OF_TRIPS_PER_DAY 5
 
 #define SHM_PROJECT_ID 'A'

@@ -121,6 +121,7 @@ void handleBridgeQueue() {
                 if (msgsnd(msq_id, &ok, sizeof(ok) - sizeof(long), 0) == -1) {
                     perror("msgsnd MSG_BOARDING_OK immediate");
                 }
+                usleep(30); // synchronizacja wyjscia
 
                 nextSequenceToBoard++;
                 checkAndBoardNextInQueue();

@@ -131,14 +131,16 @@ void attemptBoardShip() {
         }
 
         waitSemaphore(semid, SEM_MUTEX);
-        sm->peopleOnShip++;
-        sm->peopleOnBridge--;
-
-        // Boarded so changing to 1
-        onShip = 1;
-        printf(CYAN "=== Passenger %d ===" RESET " I boarded the ship (voyage no. %d). PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE: %d\n",
-               myPID, sm->currentVoyage + 1, sm->peopleOnShip, sm->peopleOnBridge);
+        int peopleOnShip = ++(sm->peopleOnShip);
+        int peopleOnBridge = --(sm->peopleOnBridge);
+        int currentVoyage = sm->currentVoyage + 1;
         signalSemaphore(semid, SEM_MUTEX);
+
+        printf(CYAN "=== Passenger %d ===" RESET " I boarded the ship (voyage no. %d). PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE: %d\n",
+               myPID, currentVoyage, peopleOnShip, peopleOnBridge);
+        fflush(stdout);
+
+        onShip = 1;
 
         // Release the bridge semaphore
         signalSemaphore(semid, SEM_BRIDGE);

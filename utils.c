@@ -1,15 +1,22 @@
 #include "utils.h"
 
 void waitSemaphore(int semID, int number) {
-   struct sembuf operation;
-   operation.sem_num = number;
-   operation.sem_op = -1;   
-   operation.sem_flg = 0;
+    struct sembuf operation;
+    operation.sem_num = number;
+    operation.sem_op = -1;   
+    operation.sem_flg = 0;
 
-   if (semop(semID, &operation, 1) == -1) {
-      perror(RED "Error in waitSemaphore" RESET);
-      exit(EXIT_FAILURE);
-   }
+    while (semop(semID, &operation, 1) == -1) {
+        if (errno == EINTR) {
+            // Interrupted by a signal, retry the semaphore operation
+            printf("waitSemaphore interrupted by signal, retrying...\n");
+            fflush(stdout);
+            continue;
+        } else {
+            perror("waitSemaphore");
+            exit(EXIT_FAILURE);
+        }
+    }
 }
 
 void signalSemaphore(int semID, int number) {
@@ -18,10 +25,17 @@ void signalSemaphore(int semID, int number) {
    operation.sem_op = 1;
    operation.sem_flg = 0;
 
-   if (semop(semID, &operation, 1) == -1) {
-        perror(RED "Error in signalSemaphore" RESET);
-        exit(EXIT_FAILURE);
-   }
+    while (semop(semID, &operation, 1) == -1) {
+        if (errno == EINTR) {
+            // Interrupted by a signal, retry the semaphore operation
+            printf("signalSemaphore interrupted by signal, retrying...\n");
+            fflush(stdout);
+            continue;
+        } else {
+            perror(RED "signalSemaphore" RESET);
+            exit(EXIT_FAILURE);
+        }
+    }
 }
 
 int initializeSemaphores() {

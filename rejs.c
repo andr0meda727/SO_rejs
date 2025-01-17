@@ -118,7 +118,7 @@ int main() {
                 exit(EXIT_FAILURE);
             }
         }
-        usleep(((rand() % 10) + 100) * 10); // <0.1s; 2s>
+        // usleep(((rand() % 10) + 100) * 10); // <0.1s; 2s>
     }
 
     while (wait(NULL) > 0) {}
