@@ -1,7 +1,7 @@
 #include "utils.h"
 #include "bridge_queue.h"
 
-#define NUM_PASSENGERS 100
+#define NUM_PASSENGERS 500
 
 int shmid, semid, msq_id;
 SharedMemory *sm;
@@ -23,12 +23,26 @@ void signalHandler(int sig) {
         unlink(FIFO_PATH_PASSENGERS); // Delete FIFO file
         printf(GREEN "Cleanup complete, exiting.\n" RESET);
         exit(0);
+    } else if (sig == SIGCHLD) {
+        // Zombie process handling
+        while (waitpid(-1, NULL, WNOHANG) > 0);
     }
 }
 
+
 int main() {
-    if (signal(SIGINT, signalHandler) == SIG_ERR) {
-        perror(RED "Signal handler setup failed" RESET);
+    struct sigaction sa;
+    sa.sa_handler = signalHandler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+        perror(RED "Signal handler setup for SIGINT failed" RESET);
+        exit(1);
+    }
+
+    if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+        perror(RED "Signal handler setup for SIGCHLD failed" RESET);
         exit(1);
     }
 
@@ -96,7 +110,7 @@ int main() {
 
     srand(time(NULL));
 
-    for (int i = 0; i < NUM_PASSENGERS; i++) { // for testing, otherwise generatingn all the time when the program is running
+    for (int i = 1; i < 1000; i++) { // for testing, otherwise generatingn all the time when the program is running  < NUM_PASSENGERS
         char buffer[10]; // Buffer for message
         ssize_t bytesRead = read(fifo_fd, buffer, sizeof(buffer));
 
@@ -119,7 +133,7 @@ int main() {
             }
         }
 
-        // usleep(((rand() % 10) + 100) * 1000); // some random time between passengers generation
+        // usleep(((rand() % 10) + 100) * 100); // some random time between passengers generation
     }
 
     while (wait(NULL) > 0) {}
@@ -128,6 +142,7 @@ int main() {
     shmdt(sm);
     cleanupSharedMemory(shmid);
     cleanupSemaphores(semid);
+
     if (msgctl(msq_id, IPC_RMID, NULL) == -1) {
         perror("msgctl IPC_RMID");
     }

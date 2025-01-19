@@ -10,9 +10,10 @@ pid_t myPID;
 int main(int argc, char *argv[]) {
     initialize(argc, argv);
 
+
     while (1) {
         checkSignals();
-
+    
         if (!onShip) {
             if (waitingForNextArrival) {
                 waitForShipToReturn();
@@ -98,13 +99,26 @@ void attemptBoardBridge() {
             perror("msgsnd ENTER_BRIDGE");
         }
 
-        // Wait for the sequence reply
         BridgeMsg reply;
-        if (msgrcv(msq_id, &reply, sizeof(reply) - sizeof(long), MSG_SEQUENCE_REPLY, 0) == -1) {
-            perror(RED "msgrcv MSG_SEQUENCE_REPLY" RESET);
-        } else {
-            mySequence = reply.sequence;
+        while (1) {
+            checkSignals(); 
+
+            ssize_t ret = msgrcv(msq_id, &reply, sizeof(reply) - sizeof(long),
+                                MSG_SEQUENCE_REPLY, IPC_NOWAIT);
+            if (ret == -1) {
+                if (errno == ENOMSG) {
+                    // no msg yet
+                    // usleep(10000);
+                    continue;
+                } else {
+                    perror("msgrcv MSG_SEQUENCE_REPLY (IPC_NOWAIT)");
+                }
+            }
+            // If we got here, that means we received the message
+            break;
         }
+
+        mySequence = reply.sequence;
 
 
         // random walking time simulation
@@ -115,7 +129,7 @@ void attemptBoardBridge() {
         waitSemaphore(semid, SEM_MUTEX);
         if (sm->queueDirection == 1 || sm->shipSailing == 1) {
             // He did, we have to leave
-            int peopleOnBridge = --sm->peopleOnBridge;
+            int peopleOnBridge = --(sm->peopleOnBridge);
             signalSemaphore(semid, SEM_MUTEX);
 
             printf(CYAN "=== Passenger %d ===" RESET " I leave the bridge because the captain is about to sail away. People on bridge left: %d\n", myPID, peopleOnBridge);
@@ -143,17 +157,31 @@ void attemptBoardShip(int tripWhenTried) {
         perror("msgsnd WANT_TO_BOARD");
     }
 
-    // We receive a response (OK or refusal), wait for a message of type = myPID
     BridgeMsg boardResp;
-    if (msgrcv(msq_id, &boardResp, sizeof(boardResp) - sizeof(long), myPID, 0) == -1) {
-        perror("msgrcv myPID -> boarding response");
+    while (1) {
+        ssize_t ret = msgrcv(msq_id, &boardResp, sizeof(boardResp) - sizeof(long),
+                             myPID, IPC_NOWAIT);
+        if (ret == -1) {
+            if (errno == ENOMSG) {
+                // No message (yet) for me.
+                // check if some signal occured
+                checkSignals();
+
+                // usleep(10000); 
+                continue;
+            } else {
+                perror("msgrcv myPID -> boarding response (IPC_NOWAIT)");
+                exit(EXIT_FAILURE);
+            }
+        }
+        // If we got here, that means we received the message boardResp.
+        break;
     }
 
     // sequence >= 0 => OK
     if (boardResp.sequence >= 0) {
         // Boarding
         onShip = 1;
-
         signalSemaphore(semid, SEM_BRIDGE);
     } else {
         // sequence == -1 => denial, ship full
@@ -177,7 +205,7 @@ void disembarkShip() {
     int nowQueueDir = sm->queueDirection;
     signalSemaphore(semid, SEM_MUTEX);
 
-    if (nowSail == 0 && nowQueueDir == 1) {
+    if (nowSail == 0 && nowQueueDir == 1) { // TU COS CHYBA
         // Can disembark
         waitSemaphore(semid, SEM_BRIDGE);
         waitSemaphore(semid, SEM_MUTEX);
@@ -189,7 +217,7 @@ void disembarkShip() {
 
         // Simulation of crossing the bridge in disembarking
         // sleep(1);
-        // usleep(100)
+        // usleep(1000000);
 
         // Successfully disembarked
         waitSemaphore(semid, SEM_MUTEX);
@@ -207,12 +235,12 @@ void disembarkShip() {
 void disembarkAfterEndOfDaySignal() {
     waitSemaphore(semid, SEM_BRIDGE);
     waitSemaphore(semid, SEM_MUTEX);
-    printf(CYAN "=== Passenger %d ===" RESET " End of day signal received. I'm getting off the ship. PEOPLE ON SHIP LEFT: %d, PEOPLE ON BRIDGE LEFT: %d\n", getpid(), --(sm->peopleOnShip), ++(sm->peopleOnBridge));
+    printf(CYAN "=== Passenger %d ===" RESET " End of day signal received. I'm getting off the ship. PEOPLE ON SHIP LEFT: %d, PEOPLE ON BRIDGE: %d\n", getpid(), --(sm->peopleOnShip), ++(sm->peopleOnBridge));
     signalSemaphore(semid, SEM_MUTEX);
 
     // simulation of crossing the bridge in disembarking on signal
     // sleep(1);
-    // usleep(100);
+    // usleep(10000);
 
     waitSemaphore(semid, SEM_MUTEX);
     printf(CYAN "=== Passenger %d ===" RESET " I left the bridge. Exiting port. PEOPLE ON SHIP LEFT: %d, PEOPLE ON BRIDGE LEFT: %d\n", getpid(), sm->peopleOnShip, --(sm->peopleOnBridge));
@@ -236,5 +264,4 @@ void waitForShipToReturn() {
         }
     }
 }
-
 
