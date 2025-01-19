@@ -8,9 +8,6 @@ void waitSemaphore(int semID, int number) {
 
     while (semop(semID, &operation, 1) == -1) {
         if (errno == EINTR) {
-            // Interrupted by a signal, retry the semaphore operation
-            printf("waitSemaphore interrupted by signal, retrying...\n");
-            fflush(stdout);
             continue;
         } else {
             perror("waitSemaphore");
@@ -27,9 +24,6 @@ void signalSemaphore(int semID, int number) {
 
     while (semop(semID, &operation, 1) == -1) {
         if (errno == EINTR) {
-            // Interrupted by a signal, retry the semaphore operation
-            printf("signalSemaphore interrupted by signal, retrying...\n");
-            fflush(stdout);
             continue;
         } else {
             perror(RED "signalSemaphore" RESET);

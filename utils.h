@@ -17,6 +17,8 @@
 #include <time.h>
 #include <sys/msg.h>
 #include <sys/ipc.h>
+#include <sys/time.h>
+
 
 #define RED "\033[31m"
 #define GREEN "\033[32m"
@@ -28,11 +30,11 @@
 #define FIFO_PATH "/tmp/shipCaptainPID"
 #define FIFO_PATH_PASSENGERS "/tmp/passengers"
 
-#define SHIP_CAPACITY 25
+#define SHIP_CAPACITY 75
 #define BRIDGE_CAPACITY 10
-#define TIME_BETWEEN_TRIPS 5 // [s]
-#define TRIP_DURATION 2 // [s]
-#define NUMBER_OF_TRIPS_PER_DAY 50
+#define TIME_BETWEEN_TRIPS 10// [s]
+#define TRIP_DURATION 5 // [s]
+#define NUMBER_OF_TRIPS_PER_DAY 5
 
 #define SHM_PROJECT_ID 'A'
 #define SEM_PROJECT_ID 'B'
@@ -44,15 +46,14 @@
 typedef struct {
     int peopleOnShip;
     int peopleOnBridge;
-    int currentVoyage;      // Current number of completed voyages
-    int signalEndOfDay;     // Signal 2
-    int queueDirection;     // 0 = towards ship, 1 = towards land
+    int currentVoyage;  // Current number of completed voyages
+    int signalEndOfDay; // Signal 2
+    int queueDirection; // 0 = towards ship, 1 = towards land
     int shipSailing;    // 0 = in port, 1 = on cruise
 } SharedMemory;
 
 
 void handleInput();
-void launchShipCaptain(int shmid, int semid);
 void launchHarbourCaptain(pid_t shipCaptainPID);
 int initializeSharedMemory();
 int initializeSemaphores();

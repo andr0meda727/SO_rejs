@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -pthread
+CFLAGS = -Wall -Wextra
 
 all: rejs harbourCaptain shipCaptain passenger
 

@@ -10,14 +10,13 @@
 #define MSG_PERMISSIONS 0600
 
 // Message types
-#define MSG_ENTER_BRIDGE 1  // Passenger: "I am entering the bridge, please give me a sequence"
+#define MSG_ENTER_BRIDGE 1   // Passenger: "I am entering the bridge, please give me a sequence"
 #define MSG_WANT_TO_BOARD 2  // Passenger: "I want to board the ship, I have a sequence"
-#define MSG_SEQUENCE_REPLY 3  // Captain: "Here is your sequence"
-#define MSG_BOARDING_OK 4  // Captain: "You may board the ship"
+#define MSG_SEQUENCE_REPLY 3 // Captain: "Here is your sequence"
 
 // Message structure
 typedef struct {
-    long mtype; // must be first
+    long mtype;
     pid_t pid; // Passenger's PID
     int sequence; // assigned sequence number
 } BridgeMsg;

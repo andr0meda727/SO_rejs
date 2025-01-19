@@ -2,16 +2,16 @@
 #include "bridge_queue.h"
 #include "shipCaptain.h"
 
+
 volatile sig_atomic_t endOfDaySignal = 0; // Flag for sigusr2
 SharedMemory *sm;
 
-int shmid, semid;
+int shmid, semid, msq_id;
 int earlyVoyage = 0;
-
+int signalReceived = 0;
 #define MAX_WAITING 2000
 
 // Data for handling queues
-static int msq_id = -1; // Queue ID
 static int globalSequenceCounter = 0; // Starting from 0, increments
 static int nextSequenceToBoard = 0; // Who is next to board the ship
 static pid_t waitingArray[MAX_WAITING]; // waitingArray[seq] = Passenger's PID (or 0)
@@ -40,9 +40,8 @@ int main(int argc, char *argv[]) {
     setupSignalHandlers();
 
     while (1) {
-        handleBridgeQueue();
-
-        performLoading(); // change to perform all??
+        // handleBridgeQueue();
+        performCruiseOperations();
     }
 
     cleanupAndExit();
@@ -51,7 +50,7 @@ int main(int argc, char *argv[]) {
 
 
 // Check end-of-day or early voyage conditions
-int isEndOfDayOrEarlyVoyage() {
+void EndOfDayOrEarlyVoyage() {
     waitSemaphore(semid, SEM_MUTEX);
     int endOfDay = sm->signalEndOfDay;
     signalSemaphore(semid, SEM_MUTEX);
@@ -71,12 +70,20 @@ int isEndOfDayOrEarlyVoyage() {
 
     if (earlyVoyage) {
         printf(YELLOW "=== Ship Captain ===" RESET " Early departure signal received.\n");
-        earlyVoyage = 0;
+        // Waiting until the bridge is empty
+        while (1) {
+            waitSemaphore(semid, SEM_MUTEX);
+            int peopleOnBridge = sm->peopleOnBridge;
+            signalSemaphore(semid, SEM_MUTEX);
 
-        return 1;
+            if (peopleOnBridge == 0) {
+                break;
+            }
+        }
+        earlyVoyage = 0;
     }
 
-    return 0; 
+    signalReceived = 1;
 }
 
 // Handle passenger messages and queues
@@ -93,8 +100,8 @@ void handleBridgeQueue() {
        if (msg.mtype == MSG_ENTER_BRIDGE) {
             // Passenger entering the bridge and asks for a sequence number
             int seq = globalSequenceCounter++;
-            printf(YELLOW "=== ShipCaptain ===" RESET " Passenger %d enters the bridge -> assigned seq=%d\n", msg.pid, seq);
-
+            printf(YELLOW "=== Ship Captain ===" RESET " Passenger %d enters the bridge -> assigned seq=%d\n", msg.pid, seq);
+            
             // Sending back to the passenger reply
             BridgeMsg reply;
             reply.mtype = MSG_SEQUENCE_REPLY;
@@ -107,12 +114,18 @@ void handleBridgeQueue() {
         } else if (msg.mtype == MSG_WANT_TO_BOARD) {
             pid_t pid = msg.pid;
             int seq = msg.sequence;
+            waitSemaphore(semid, SEM_MUTEX);
 
-            printf(YELLOW "=== Ship Captain ===" RESET " Passenger %d wants to board (seq=%d). nextSequenceToBoard=%d\n", pid, seq, nextSequenceToBoard);
+            // We check if the passenger is the “next in line”
+            // and whether SHIP_CAPACITY has not yet been exceeded.
+            if (seq == nextSequenceToBoard && sm->peopleOnShip < SHIP_CAPACITY) {
+                // Passenger can enter
+                sm->peopleOnShip++;
+                sm->peopleOnBridge--;
+                int currentVoyage = sm->currentVoyage + 1;
 
-            // Check if this passenger is "next to board"
-            if (seq == nextSequenceToBoard) {
-                // Can board immediately
+                printf(CYAN "=== Passenger %d ===" RESET " Boarded the ship (voyage no. %d). PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE: %d\n", pid, currentVoyage, sm->peopleOnShip, sm->peopleOnBridge);
+                signalSemaphore(semid, SEM_MUTEX); 
                 BridgeMsg ok;
                 ok.mtype = pid;
                 ok.pid = pid;
@@ -121,24 +134,49 @@ void handleBridgeQueue() {
                 if (msgsnd(msq_id, &ok, sizeof(ok) - sizeof(long), 0) == -1) {
                     perror("msgsnd MSG_BOARDING_OK immediate");
                 }
-                usleep(30); // synchronizacja wyjscia
 
                 nextSequenceToBoard++;
-                checkAndBoardNextInQueue();
-            } else {
-                waitingArray[seq] = pid;
-                printf(YELLOW "=== Ship Captain ===" RESET " Passenger %d queued for boarding (seq=%d)\n", pid, seq);
+                checkAndBoardNextInQueue(); 
+            }
+            else if (sm->peopleOnShip >= SHIP_CAPACITY) {
+                // Passenger can't enter, ship full
+                signalSemaphore(semid, SEM_MUTEX);
+
+                BridgeMsg den;
+                den.mtype = pid; 
+                den.pid = pid;
+                den.sequence = -1; // denied
+
+                if (msgsnd(msq_id, &den, sizeof(den) - sizeof(long), 0) == -1) {
+                    perror("msgsnd MSG_BOARDING_DENIED");
+                }
+            }
+            else if (seq < nextSequenceToBoard) {
+                // Old seq number, passenger late, shouldnt happen
+                signalSemaphore(semid, SEM_MUTEX);
+                fprintf(stderr, RED "=== Ship Captain ===" RESET " WARNING: passenger %d has old seq=%d\n", pid, seq);
+            }
+            else {
+                // seq > nextSequenceToBoard => passenger queued
+                if (seq >= MAX_WAITING) {
+                    signalSemaphore(semid, SEM_MUTEX);
+                    fprintf(stderr, RED "=== ShipCaptain ===" RESET " ERROR: seq=%d too large.\n", seq);
+                } else {
+                    waitingArray[seq] = pid;
+                    printf(YELLOW "=== ShipCaptain ===" RESET " Passenger %d queued for boarding (seq=%d)\n", pid, seq);
+                    signalSemaphore(semid, SEM_MUTEX);
+                }
             }
         } else {
             // Other types of messages - i just ignore them
-            fprintf(stderr, RED "=== ShipCaptain === Unknown message type=%ld\n" RESET, msg.mtype);
+            fprintf(stderr, RED "=== Ship Captain === Unknown message type=%ld\n" RESET, msg.mtype);
         }
     }
 }
 
 // Check and board the next passenger in the queue
 void checkAndBoardNextInQueue() {
-    while (nextSequenceToBoard < MAX_WAITING && waitingArray[nextSequenceToBoard] != 0) {
+    while (nextSequenceToBoard < MAX_WAITING && waitingArray[nextSequenceToBoard] != 0 && nextSequenceToBoard < SHIP_CAPACITY) {
         pid_t pid = waitingArray[nextSequenceToBoard];
         waitingArray[nextSequenceToBoard] = 0;
 
@@ -152,24 +190,36 @@ void checkAndBoardNextInQueue() {
             perror("msgsnd MSG_BOARDING_OK");
         }
 
-        printf(YELLOW "=== Ship Captain ===" RESET " Passenger %d with seq=%d -> boarded!\n", pid, nextSequenceToBoard);
+        waitSemaphore(semid, SEM_MUTEX);
+        int newShipCount = ++(sm->peopleOnShip);
+        int newBridgeCount = --(sm->peopleOnBridge); 
+        int currentVoyage = sm->currentVoyage + 1;
+        signalSemaphore(semid, SEM_MUTEX);
+
+        printf(CYAN "=== Passenger %d ===" RESET " Boarded the ship (voyage no. %d). PEOPLE ON SHIP: %d, PEOPLE ON BRIDGE: %d\n", pid, currentVoyage, newShipCount, newBridgeCount);
 
         nextSequenceToBoard++;
     }
 }
 
-void performLoading() { // perform all xd
-    int slept = 0; 
-    while (slept < TIME_BETWEEN_TRIPS * 1000) {
+void performCruiseOperations() {
+    struct timeval start, current;
+    long long elapsedSeconds = 0;
+
+    // Timer to allow proper loading
+    gettimeofday(&start, NULL); 
+    while (elapsedSeconds < TIME_BETWEEN_TRIPS) {
         handleBridgeQueue();
 
-        if(isEndOfDayOrEarlyVoyage()) {
+        if(signalReceived) {
+            signalReceived = 0;
             break;
         }
-
-        usleep(1);
-        slept++;
+        
+        gettimeofday(&current, NULL);
+        elapsedSeconds = current.tv_sec - start.tv_sec; // diff in seconds
     }
+    // handleBridgeQueue(); // clear message queue
 
     startCruisePreparation();
     performVoyage();
@@ -180,12 +230,12 @@ void performLoading() { // perform all xd
 
 // Prepare for the cruise
 void startCruisePreparation() {
+    printf(YELLOW "=== Ship Captain ===" RESET " All the people on the bridge have to go ashore, we are sailing away!\n");
+
     waitSemaphore(semid, SEM_MUTEX);
     sm->queueDirection = 1;
     sm->shipSailing = 1;
     signalSemaphore(semid, SEM_MUTEX);
-
-    printf(YELLOW "=== Ship Captain ===" RESET " All the people on the bridge have to go ashore, we are sailing away!\n");
 
     // Waiting for all passengers to get off the bridge
     while (1) { 
@@ -195,8 +245,6 @@ void startCruisePreparation() {
         if (peopleOnBridge == 0) {
             break;
         }
-
-        // usleep(100000); // 0.1s
     }
 
     waitSemaphore(semid, SEM_MUTEX);
@@ -250,7 +298,7 @@ void performDisembarkation() {
     waitSemaphore(semid, SEM_MUTEX);
     sm->shipSailing = 0; // end of cruise
     sm->queueDirection = 1; // towards land to disembark
-    int voyageNumber = sm->currentVoyage++;
+    int voyageNumber = ++(sm->currentVoyage);
     signalSemaphore(semid, SEM_MUTEX);
 
     printf(YELLOW "=== Ship Captain ===" RESET " Cruise %d has ended. Arriving at port.\n", voyageNumber);
@@ -265,7 +313,11 @@ void performDisembarkation() {
 
 void getReadyForNextCruise() {
     waitSemaphore(semid, SEM_MUTEX);
-    if (sm->currentVoyage >= NUMBER_OF_TRIPS_PER_DAY) {
+    int currentVoyage = sm->currentVoyage;
+    signalSemaphore(semid, SEM_MUTEX);
+
+    if (currentVoyage >= NUMBER_OF_TRIPS_PER_DAY) {
+        waitSemaphore(semid, SEM_MUTEX);
         sm->queueDirection = 1;
         sm->signalEndOfDay = 1;
         signalSemaphore(semid, SEM_MUTEX);
@@ -273,7 +325,6 @@ void getReadyForNextCruise() {
         sendStopSignal();
         cleanupAndExit();
     }
-    signalSemaphore(semid, SEM_MUTEX);
 
     // Change bridge direction again
     waitSemaphore(semid, SEM_MUTEX);
@@ -294,7 +345,7 @@ void waitForAllPassengersToDisembark() {
         if (peopleOnShip == 0 && peopleOnBridge == 0) {
             printf(YELLOW "=== Ship Captain ===" RESET " All passengers have disembarked.\n");
             break;
-        } 
+        }
     }
 }
 
@@ -314,7 +365,6 @@ void sendPID() {
         perror(RED "write to FIFO" RESET);
         exit(EXIT_FAILURE);
     }
-
 
     printf(YELLOW "=== Ship Captain ===" RESET " PID was sent to the harbour captain.\n");
     close(fifo_fd); // Closing FIFO
@@ -336,23 +386,30 @@ void handle_signal(int sig) {
         waitSemaphore(semid, SEM_MUTEX);
         if (sm->shipSailing) {
             printf(YELLOW "=== Ship Captain ===" RESET " I'm currently sailing, the signal cannot be made.\n");
+            signalSemaphore(semid, SEM_MUTEX);
         } else {
             earlyVoyage = 1;
             sm->queueDirection = 1;
             sm->shipSailing = 1;
+            signalSemaphore(semid, SEM_MUTEX);
         }
-        signalSemaphore(semid, SEM_MUTEX);
     } else if (sig == SIGUSR2) {
         sendStopSignal();
 
         waitSemaphore(semid, SEM_MUTEX);
-        if (!sm->shipSailing) {
+        int shipSailing = sm->shipSailing;
+        signalSemaphore(semid, SEM_MUTEX);
+
+        if (!shipSailing) {
+            waitSemaphore(semid, SEM_MUTEX);
             sm->signalEndOfDay = 1;
+            signalSemaphore(semid, SEM_MUTEX);
         } else {
             endOfDaySignal = 1;
         }
-        signalSemaphore(semid, SEM_MUTEX);
     }
+
+    EndOfDayOrEarlyVoyage();
 }
 
 // Setup signal handlers for SIGUSR1 and SIGUSR2
