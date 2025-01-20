@@ -1,7 +1,7 @@
 #include "utils.h"
 #include "bridge_queue.h"
 
-#define NUM_PASSENGERS 500
+#define NUM_PASSENGERS 1000
 
 int shmid, semid, msq_id;
 SharedMemory *sm;
@@ -110,7 +110,7 @@ int main() {
 
     srand(time(NULL));
 
-    for (int i = 1; i < 1000; i++) { // for testing, otherwise generatingn all the time when the program is running  < NUM_PASSENGERS
+    for (int i = 1; i && i < NUM_PASSENGERS; i++) { // for testing, otherwise generatingn all the time when the program is running  < NUM_PASSENGERS
         char buffer[10]; // Buffer for message
         ssize_t bytesRead = read(fifo_fd, buffer, sizeof(buffer));
 
@@ -133,7 +133,7 @@ int main() {
             }
         }
 
-        // usleep(((rand() % 10) + 100) * 100); // some random time between passengers generation
+        // usleep(((rand() % 10) + 100) * 1000); // some random time between passengers generation
     }
 
     while (wait(NULL) > 0) {}
