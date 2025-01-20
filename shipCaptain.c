@@ -6,6 +6,8 @@
 volatile sig_atomic_t endOfDaySignal = 0; // Flag for sigusr2
 SharedMemory *sm;
 
+int loaded = 0;
+
 
 int shmid, semid, msq_id;
 int earlyVoyage = 0;
@@ -209,6 +211,7 @@ void performCruiseOperations() {
     struct timeval start, current;
     long long elapsedSeconds = 0;
 
+    loaded = 0;
     // Timer to allow proper loading
     gettimeofday(&start, NULL); 
     while (elapsedSeconds < TIME_BETWEEN_TRIPS) {
@@ -222,6 +225,8 @@ void performCruiseOperations() {
         gettimeofday(&current, NULL);
         elapsedSeconds = current.tv_sec - start.tv_sec; // diff in seconds
     }
+    loaded = 1;
+
 
     startCruisePreparation();
     performVoyage();
@@ -413,7 +418,7 @@ void handle_signal(int sig) {
         sendStopSignal();
 
         waitSemaphore(semid, SEM_MUTEX);
-        int shipSailing = sm->shipSailing;
+        int shipSailing = sm->shipSailing && loaded;
         signalSemaphore(semid, SEM_MUTEX);
 
         if (!shipSailing) {
