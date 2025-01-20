@@ -129,10 +129,10 @@ void attemptBoardBridge() {
         waitSemaphore(semid, SEM_MUTEX);
         if (sm->queueDirection == 1 || sm->shipSailing == 1) {
             // He did, we have to leave
-            int peopleOnBridge = --(sm->peopleOnBridge);
+            sm->peopleOnBridge--;
             signalSemaphore(semid, SEM_MUTEX);
 
-            printf(CYAN "=== Passenger %d ===" RESET " I leave the bridge because the captain is about to sail away. People on bridge left: %d\n", myPID, peopleOnBridge);
+            printf(CYAN "=== Passenger %d ===" RESET " I can't enter the ship, I'm leaving the bridge.\n", myPID);
 
             signalSemaphore(semid, SEM_BRIDGE);
             return;
@@ -167,7 +167,6 @@ void attemptBoardShip(int tripWhenTried) {
                 // check if some signal occured
                 checkSignals();
 
-                // usleep(10000); 
                 continue;
             } else {
                 perror("msgrcv myPID -> boarding response (IPC_NOWAIT)");
@@ -264,4 +263,3 @@ void waitForShipToReturn() {
         }
     }
 }
-

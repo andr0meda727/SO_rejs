@@ -13,3 +13,4 @@ void waitForAllPassengersToDisembark();
 void getReadyForNextCruise();
 void sendStopSignal();
 void handle_signal(int sig);
+void dumpPassengersFromWaitingArray();

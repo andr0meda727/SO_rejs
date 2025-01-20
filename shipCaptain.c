@@ -127,6 +127,8 @@ void handleBridgeQueue() {
             }
             else if (sm->peopleOnShip >= SHIP_CAPACITY) {
                 // Passenger can't enter, ship full
+                sm->shipSailing = 1;
+                sm->queueDirection = 1;
                 signalSemaphore(semid, SEM_MUTEX);
 
                 BridgeMsg den;
@@ -237,20 +239,7 @@ void startCruisePreparation() {
     sm->shipSailing = 1;
     signalSemaphore(semid, SEM_MUTEX);
 
-    // dump passengers from waitingArray
-    for (int y = 0; y < globalSequenceCounter; y++) {
-        pid_t pid = waitingArray[y];
-        if (pid != 0) {
-            BridgeMsg den;
-            den.mtype = pid;
-            den.pid = pid;
-            den.sequence = -1; // denied
-            msgsnd(msq_id, &den, sizeof(den) - sizeof(long), 0);
-            waitingArray[y] = 0;
-        }
-    }
-
-    // signalSemaphore(semid, SEM_MUTEX);
+    dumpPassengersFromWaitingArray();
 
     // Waiting for all passengers to get off the bridge
     while (1) { 
@@ -360,17 +349,7 @@ void waitForAllPassengersToDisembark() {
         int peopleOnBridge = sm->peopleOnBridge;
         signalSemaphore(semid, SEM_MUTEX);
 
-        for (int x = 0; x < globalSequenceCounter; x++) {
-            pid_t pid = waitingArray[x];
-            if (pid != 0) {
-                BridgeMsg den;
-                den.mtype = pid;
-                den.pid = pid;
-                den.sequence = -1; 
-                msgsnd(msq_id, &den, sizeof(den) - sizeof(long), 0);
-                waitingArray[x] = 0;
-            }
-        }
+        dumpPassengersFromWaitingArray();
 
         if (peopleOnShip == 0 && peopleOnBridge == 0) {
             printf(YELLOW "=== Ship Captain ===" RESET " All passengers have disembarked.\n");
@@ -490,4 +469,18 @@ void sendStopSignal() {
 void cleanupAndExit() {
     shmdt(sm);
     exit(0);
+}
+
+void dumpPassengersFromWaitingArray() {
+    for (int y = 0; y < globalSequenceCounter; y++) {
+        pid_t pid = waitingArray[y];
+        if (pid != 0) {
+            BridgeMsg den;
+            den.mtype = pid;
+            den.pid = pid;
+            den.sequence = -1; // denied
+            msgsnd(msq_id, &den, sizeof(den) - sizeof(long), 0);
+            waitingArray[y] = 0;
+        }
+    }
 }
