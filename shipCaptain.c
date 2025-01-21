@@ -8,7 +8,6 @@ SharedMemory *sm;
 
 int loaded = 0;
 
-
 int shmid, semid, msq_id;
 int earlyVoyage = 0;
 int signalReceived = 0;
@@ -20,8 +19,12 @@ static int nextSequenceToBoard = 0; // Who is next to board the ship
 static pid_t waitingArray[MAX_WAITING]; // waitingArray[seq] = Passenger's PID (or 0)
 
 
-// Main Function
 int main(int argc, char *argv[]) {
+/*
+  * Main function for the ship captain process.
+  * Initializes shared memory, message queues, and signal handlers.
+  * Enters a loop to perform cruise operations until the end of day.
+*/
     if (argc != 3) {
         fprintf(stderr, RED "Usage: %s <shmid> <semid>" RESET "\n", argv[0]);
         exit(EXIT_FAILURE);
@@ -51,8 +54,11 @@ int main(int argc, char *argv[]) {
 }
 
 
-// Check end-of-day or early voyage conditions
 void EndOfDayOrEarlyVoyage() {
+/*
+  * Handles end-of-day or early voyage signals.
+  * Checks conditions for ending the day or starting an early voyage.
+*/
     waitSemaphore(semid, SEM_MUTEX);
     int endOfDay = sm->signalEndOfDay;
     signalSemaphore(semid, SEM_MUTEX);
@@ -74,8 +80,13 @@ void EndOfDayOrEarlyVoyage() {
     signalReceived = 1;
 }
 
-// Handle passenger messages and queues
+
 void handleBridgeQueue() {
+/*
+  * Handles passenger messages and manages the boarding queue.
+  * Processes messages from the message queue to assign sequence numbers
+  * and allow or deny boarding based on ship capacity and queue position.
+*/
     BridgeMsg msg;
     int processed = 0;
 
@@ -166,8 +177,13 @@ void handleBridgeQueue() {
     }
 }
 
-// Check and board the next passenger in the queue
+
 void checkAndBoardNextInQueue() {
+/*
+  * Boards the next passenger in the queue, if conditions allow.
+  * Checks the queue for passengers ready to board and processes them.
+*/
+
     while (nextSequenceToBoard < MAX_WAITING && waitingArray[nextSequenceToBoard] != 0) {
         pid_t pid = waitingArray[nextSequenceToBoard];
         waitingArray[nextSequenceToBoard] = 0;
@@ -207,7 +223,12 @@ void checkAndBoardNextInQueue() {
     }
 }
 
+
 void performCruiseOperations() {
+/*
+  * Performs the main operations of a cruise.
+  * Handles passenger boarding, cruise execution, disembarkation, and preparation for the next cruise.
+*/
     struct timeval start, current;
     long long elapsedSeconds = 0;
 
@@ -235,8 +256,11 @@ void performCruiseOperations() {
 }
 
 
-// Prepare for the cruise
 void startCruisePreparation() {
+/*
+  * Prepares for a cruise.
+  * Ensures all passengers on the bridge leave and sets the ship's status to sailing.
+*/
     printf(YELLOW "=== Ship Captain ===" RESET " All the people on the bridge have to go ashore, we are sailing away!\n");
 
     waitSemaphore(semid, SEM_MUTEX);
@@ -267,8 +291,13 @@ void startCruisePreparation() {
     printf(YELLOW "=== Ship Captain ===" RESET " Sailing on cruise %d with %d passengers.\n", voyageNumber, peopleOnVoyage);
 }
 
-// Perform the cruise
+
 void performVoyage() {
+/*
+  * Simulates a voyage.
+  * Uses nanosleep to simulate the duration of the voyage, handling interruptions.
+*/
+
     waitSemaphore(semid, SEM_MUTEX);
     int voyageNumber = sm->currentVoyage + 1;
     signalSemaphore(semid, SEM_MUTEX);
@@ -294,6 +323,11 @@ void performVoyage() {
 
 
 void performDisembarkation() {
+/*
+  * Handles passenger disembarkation.
+  * Manages end-of-day signal that appeared during cruise and ensures all passengers leave the ship.
+*/
+
     // End-of-day received during cruise, disembark all passengers and end
     if (endOfDaySignal) {
         printf(YELLOW "=== Ship Captain ===" RESET " End-of-day signal received during voyage. Ending day as per signal.\n");
@@ -317,12 +351,17 @@ void performDisembarkation() {
     // Reset waiting queue
     memset(waitingArray, 0, sizeof(waitingArray));
     globalSequenceCounter = 0;
-    nextSequenceToBoard = 0; // reset numbers
+    nextSequenceToBoard = 0;
 
     waitForAllPassengersToDisembark();
 }
 
 void getReadyForNextCruise() {
+/*
+  * Prepares for the next cruise.
+  * Checks if the daily trip limit is reached, and if not, resets the ship for boarding.
+*/
+
     waitSemaphore(semid, SEM_MUTEX);
     int currentVoyage = sm->currentVoyage;
     signalSemaphore(semid, SEM_MUTEX);
@@ -345,8 +384,12 @@ void getReadyForNextCruise() {
     printf(YELLOW "=== Ship Captain ===" RESET " Bridge direction set back to boarding for the next voyage.\n");
 }
 
-// Wait for all passengers to disembark
 void waitForAllPassengersToDisembark() {
+/*
+  * Waits for all passengers to disembark.
+  * Continues until both the ship and the bridge are empty.
+*/
+
     while (1) {
         handleBridgeQueue(); // clear message queue
         waitSemaphore(semid, SEM_MUTEX);
@@ -364,8 +407,9 @@ void waitForAllPassengersToDisembark() {
 }
 
 
-// Send PID to harbour captain
 void sendPID() {
+// Sends the ship captain's PID to the harbour captain via FIFO.
+
     int fifo_fd = open(FIFO_PATH, O_WRONLY);
     if (fifo_fd == -1) {
         perror("open fifo");
@@ -384,8 +428,10 @@ void sendPID() {
     close(fifo_fd); // Closing FIFO
 }
 
-// Initialize the message queue
+
 void initializeMessageQueue() {
+// Initializes the message queue for bridge communication.
+
     msq_id = msgget(BRIDGE_QUEUE_KEY, IPC_CREAT | MSG_PERMISSIONS);
     if (msq_id == -1) {
         perror(RED "msgget shipCaptain" RESET);
@@ -395,8 +441,12 @@ void initializeMessageQueue() {
 }
 
 
-// Handle signals for early voyage or end of day
 void handle_signal(int sig) {
+/*
+  * Handles signals for early voyage (SIGUSR1) or end of day (SIGUSR2).
+  * Modifies ship status or queue direction based on the signal received.
+*/
+
     if (sig == SIGUSR1) {
         waitSemaphore(semid, SEM_MUTEX);
         if (sm->shipSailing == 1) {
@@ -435,8 +485,9 @@ void handle_signal(int sig) {
 }
 
 
-// Setup signal handlers for SIGUSR1 and SIGUSR2
 void setupSignalHandlers() {
+// Setup signal handlers for SIGUSR1 and SIGUSR2
+
     struct sigaction sa;
     sa.sa_handler = handle_signal;
     sigemptyset(&sa.sa_mask);
@@ -454,8 +505,9 @@ void setupSignalHandlers() {
 }
 
 
-// Send the stop signal to passengers
 void sendStopSignal() {
+// Sends a stop signal to passengers via FIFO to halt further operations.
+
     int fifo_fd = open(FIFO_PATH_PASSENGERS, O_WRONLY);
     if (fifo_fd == -1) {
         perror(RED "open FIFO ship" RESET);
@@ -470,13 +522,19 @@ void sendStopSignal() {
 }
 
 
-// Cleanup resources and exit
 void cleanupAndExit() {
+// Cleans up shared resources and exits the process.
+
     shmdt(sm);
     exit(0);
 }
 
+
 void dumpPassengersFromWaitingArray() {
+/*
+  * Removes all passengers from the waiting array by denying boarding.
+*/
+
     for (int y = 0; y < globalSequenceCounter; y++) {
         pid_t pid = waitingArray[y];
         if (pid != 0) {

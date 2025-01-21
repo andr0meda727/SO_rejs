@@ -1,6 +1,13 @@
 #include "utils.h"
 
 void waitSemaphore(int semID, int number) {
+/*
+  * Waits for a semaphore to become available by decrementing its value.
+  * If the semaphore value is already zero, the process blocks until it becomes available.
+  *
+  * @param semID The ID of the semaphore set.
+  * @param number The index of the semaphore in the set to decrement.
+*/
     struct sembuf operation;
     operation.sem_num = number;
     operation.sem_op = -1;   
@@ -16,7 +23,15 @@ void waitSemaphore(int semID, int number) {
     }
 }
 
+
 void signalSemaphore(int semID, int number) {
+/*
+  * Signals a semaphore by incrementing its value, potentially unblocking waiting processes.
+  *
+  * @param semID The ID of the semaphore set.
+  * @param number The index of the semaphore in the set to increment.
+*/
+
    struct sembuf operation;
    operation.sem_num = number;
    operation.sem_op = 1;
@@ -33,6 +48,12 @@ void signalSemaphore(int semID, int number) {
 }
 
 int initializeSemaphores() {
+/*
+  * Initializes a set of semaphores for mutual exclusion and bridge control.
+  *
+  * @return The ID of the created semaphore set.
+*/
+
     key_t semKey = ftok(".", SEM_PROJECT_ID);
     if (semKey == -1) {
         perror(RED "ftok for sem" RESET);
@@ -60,6 +81,12 @@ int initializeSemaphores() {
 }
 
 void cleanupSemaphores(int semid) {
+/*
+  * Cleans up and removes a semaphore set.
+  *
+  * @param semid The ID of the semaphore set to remove.
+*/
+
     if (semctl(semid, 0, IPC_RMID) == -1) {
         perror(RED "semctl IPC_RMID" RESET);
     } else {
@@ -68,6 +95,12 @@ void cleanupSemaphores(int semid) {
 }
 
 int initializeSharedMemory() {
+/*
+  * Initializes a shared memory segment to hold shared data between processes.
+  *
+  * @return The ID of the created shared memory segment.
+*/
+
     key_t memoryKey = ftok(".", SHM_PROJECT_ID);
     if (memoryKey == -1) {
         perror(RED "ftok for shm" RESET);
@@ -85,6 +118,12 @@ int initializeSharedMemory() {
 }
 
 void cleanupSharedMemory(int shmid) {
+/*
+  * Cleans up and removes a shared memory segment.
+  *
+  * @param shmid The ID of the shared memory segment to remove.
+*/
+
     if (shmctl(shmid, IPC_RMID, NULL) == -1) {
         perror(RED "shmctl" RESET);
     } else {
@@ -93,6 +132,11 @@ void cleanupSharedMemory(int shmid) {
 }
 
 void handleInput() {
+/*
+  * Validates configuration parameters such as bridge and ship capacity, trip duration,
+  * and the number of trips per day to ensure logical consistency.
+*/
+
     if (SHIP_CAPACITY <= BRIDGE_CAPACITY) {
         fprintf(stderr, RED "The bridge capacity must be smaller than the ship capacity." RESET "\n");
         exit(1);
@@ -132,6 +176,13 @@ void handleInput() {
 }
 
 SharedMemory* attachSharedMemory(int shmid) {
+/*
+  * Attaches a shared memory segment to the process's address space.
+  *
+  * @param shmid The ID of the shared memory segment to attach.
+  * @return A pointer to the attached shared memory segment.
+*/
+
     SharedMemory* sm = (SharedMemory *)shmat(shmid, NULL, 0);
     if (sm == (void *)-1) {
         perror(RED "shmat" RESET);

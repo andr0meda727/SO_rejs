@@ -6,9 +6,13 @@
 int shmid, semid, msq_id;
 SharedMemory *sm;
 
-void signalHandler(int sig) {
-    // Cleaning after ctrl+c
 
+void signalHandler(int sig) {
+    /* 
+    * Signal handler for the process.
+    * Handles SIGINT for cleanup and SIGCHLD for zombie process handling.
+    * Cleans up shared resources and gracefully exits when SIGINT is received.
+    */
     if (sig == SIGINT) {
         if (sm != NULL) {
             shmdt(sm);
@@ -31,6 +35,12 @@ void signalHandler(int sig) {
 
 
 int main() {
+    /*
+    * Setup signal handling for SIGINT and SIGCHLD.
+    *
+    * SIGINT is used for cleanup during program termination.
+    * SIGCHLD prevents zombie processes
+    */
     struct sigaction sa;
     sa.sa_handler = signalHandler;
     sigemptyset(&sa.sa_mask);
@@ -48,6 +58,10 @@ int main() {
 
     handleInput();
 
+    /*
+    * Initialize shared memory and semaphores.
+    * Create message queue and FIFOs for communication.
+    */
     shmid = initializeSharedMemory();
     sm = attachSharedMemory(shmid);
     semid = initializeSemaphores();
@@ -79,6 +93,7 @@ int main() {
     sm->shipSailing = 0;
     signalSemaphore(semid, SEM_MUTEX);
 
+    // Fork and execute shipCaptain
     pid_t shipCaptainPid = fork();
     if (shipCaptainPid == -1) {
         perror(RED "Error forking for shipCaptain" RESET);
@@ -90,6 +105,7 @@ int main() {
         }
     }
 
+    // Fork and execute harbourCaptain
     pid_t harbourCaptainPid = fork();
     if (harbourCaptainPid == -1) {
         perror(RED "Error forking for harbourCaptain" RESET);
@@ -110,7 +126,11 @@ int main() {
 
     srand(time(NULL));
 
-    for (int i = 1; i && i < NUM_PASSENGERS; i++) { // for testing, otherwise generatingn all the time when the program is running  < NUM_PASSENGERS
+    /*
+    * Generate passenger processes until the specified number of passengers is reached.
+    * Stop if a 'stop' message is received from the FIFO.
+    */
+    for (int i = 1; i && i < NUM_PASSENGERS; i++) {
         char buffer[10]; // Buffer for message
         ssize_t bytesRead = read(fifo_fd, buffer, sizeof(buffer));
 

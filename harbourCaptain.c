@@ -1,6 +1,12 @@
 #include "utils.h"
 
 int main(int argc, char *argv[]) {
+/*
+  * Main function for the Harbour Captain process.
+  * Reads the ship captain's PID from the FIFO and starts managing signals for early cruises,
+  * end-of-day operations, or exits based on user input.
+*/
+
     if (argc != 1) {
         fprintf(stderr, RED "Usage: %s" RESET "\n", argv[0]);
         exit(EXIT_FAILURE);
@@ -29,6 +35,14 @@ int main(int argc, char *argv[]) {
 
 
 void launchHarbourCaptain(pid_t shipCaptainPID) {
+/*
+  * Starts the Harbour Captain's interactive signal management process.
+  * Listens for user input to send signals to the ship captain to trigger early departures,
+  * end-of-day operations, or to exit.
+  *
+  * @param shipCaptainPID The PID of the ship captain process.
+*/
+
     printf(MAGENTA "=== Habour Captain ===" RESET " Starting\n");
     printf(MAGENTA "=== Habour Captain ===" RESET " Enter: w = early cruise, k = end of day, q = exit\n");
 
