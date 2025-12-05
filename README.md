@@ -1,18 +1,105 @@
-# Temat 1 - Rejs
-Przy nabrzeżu stoi statek o pojemności N pasażerów. Statek z lądem jest połączony mostkiem o
-pojemności K (K < N). Na statek próbują dostać się pasażerowie, z tym, że na statek nie może ich
-wejść więcej niż N, a wchodząc na statek na mostku nie może być ich równocześnie więcej niż K.
-Statek co określoną ilość czasu T1 (np.: jedną godzinę) wypływa w rejs. W momencie odpływania
-kapitan statku musi dopilnować aby na mostku nie było żadnego wchodzącego pasażera.
-Jednocześnie musi dopilnować by liczba pasażerów na statku nie przekroczyła N. Dodatkowo statek
-może odpłynąć przed czasem T1 w momencie otrzymania polecenia (sygnał1) od kapitana portu.
-Rejs trwa określoną ilość czasu równą T2. Po dotarciu do portu pasażerowie opuszczają statek. Po
-opuszczeniu statku przez ostatniego pasażera, kolejni pasażerowie próbują dostać się na pokład
-(mostek jest na tyle wąski, że w danym momencie ruch może odbywać się tylko w jedną stronę).
-Statek może wykonać maksymalnie R rejsów w danym dniu lub przerwać ich wykonywanie po
-otrzymaniu polecenia (sygnał2) od kapitana portu (jeżeli to polecenie nastąpi podczas załadunku,
-statek nie wypływa w rejs, a pasażerowie opuszczają statek. Jeżeli polecenie dotrze do kapitana w
-trakcie rejsu statek kończy bieżący rejs normalnie).
-Napisz odpowiednio procedury Pasażer, KapitanStatku, KapitanPortu.
+# System obsługi załadunku i rejsów statku pasażerskiego
 
-Link do repozytorium: https://github.com/andr0meda727/SO_rejs
+## Opis projektu
+
+Projekt symuluje system portowy z wykorzystaniem programowania współbieżnego.
+Statek obsługuje pasażerów wchodzących przez mostek o ograniczonej przepustowości oraz wykonuje ograniczoną liczbę rejsów w ciągu dnia.
+W systemie działają trzy procesy:
+
+* **Pasażer**
+* **KapitanStatku**
+* **KapitanPortu**
+
+Celem projektu jest prawidłowa synchronizacja procesów oraz zapewnienie bezpieczeństwa podczas załadunku, rejsu i wyładunku.
+
+---
+
+## Parametry systemu
+
+* **N** – maksymalna liczba pasażerów, którzy mogą jednorazowo znajdować się na statku
+* **K** – maksymalna liczba pasażerów mogących jednocześnie przebywać na moście (K < N)
+* **T1** – czas pomiędzy planowanymi odpłynięciami statku
+* **T2** – czas trwania rejsu
+* **R** – maksymalna liczba rejsów dziennie
+
+---
+
+## Zasady działania
+
+### Pasażerowie
+
+* Mogą wejść na mostek tylko, gdy obecna liczba pasażerów na moście < **K**.
+* Mogą wejść na statek tylko, gdy liczba pasażerów na pokładzie < **N**.
+* Mostek działa jednokierunkowo — nie można jednocześnie wchodzić i schodzić.
+* Po przypłynięciu statku pasażerowie opuszczają pokład przed rozpoczęciem kolejnego załadunku.
+
+---
+
+### Kapitan Statku
+
+Odpowiada za:
+
+* kontrolę liczby pasażerów na statku,
+* pilnowanie, by podczas odpływania mostek był pusty,
+* rozpoczęcie rejsu po:
+
+  * upływie czasu **T1**, lub
+  * otrzymaniu sygnału **sygnał1** (polecenie natychmiastowego odpłynięcia),
+* zakończenie pracy po wykonaniu **R** rejsów lub po otrzymaniu **sygnał2**.
+
+**Sygnał2**:
+
+* jeśli dotrze podczas załadunku — rejs nie startuje, pasażerowie opuszczają statek, system kończy pracę,
+* jeśli dotrze podczas rejsu — rejs kończy się normalnie, kolejne nie są wykonywane.
+
+---
+
+### Kapitan Portu
+
+Może wysyłać dwa sygnały:
+
+* **sygnał1** — natychmiastowy start rejsu (o ile mostek pusty)
+* **sygnał2** — zakończenie pracy statku
+
+Sygnały mogą pojawić się w dowolnym momencie działania systemu.
+
+---
+
+## Zaimplementowane procedury
+
+### `Pasażer`
+
+* Wejście na mostek (jeśli < K)
+* Wejście na statek (jeśli < N)
+* Oczekiwanie na koniec rejsu
+* Wyjście ze statku i z mostka
+
+---
+
+### `KapitanStatku`
+
+* Zliczanie pasażerów wewnątrz statku
+* Pilnowanie pustego mostka przy odpływie
+* Start rejsu (czasowy lub po sygnale)
+* Obsługa sygnałów **sygnał1** i **sygnał2**
+* Zatrzymanie systemu po R rejsach lub sygnał2
+
+---
+
+### `KapitanPortu`
+
+* Generowanie sygnału **sygnał1**
+* Generowanie sygnału **sygnał2**
+
+---
+
+## Cel projektu
+
+* Zaprezentowanie problemu synchronizacji procesów
+* Obsługa współdzielenia zasobów (mostek, statek)
+* Zaprojektowanie poprawnego modelu komunikacji między procesami
+* Zapobieganie sytuacjom niebezpiecznym, takim jak:
+
+  * przekroczenie pojemności,
+  * odpłynięcie z pasażerami na moście,
+  * konflikt wejścia i wyjścia na mostku.
